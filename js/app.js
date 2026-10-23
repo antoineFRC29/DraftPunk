@@ -273,7 +273,7 @@
       <section class="home">
         <div class="helmets" aria-hidden="true"><i class="h1"></i><i class="h2"></i></div>
         ${logo(true)}
-        <p class="tagline">Le jeu de draft à tour de rôle. Deux joueurs, un budget, des inconnus.</p>
+        <p class="tagline">Tronçonneurs Production</p>
         <div class="modes">
           <button class="mode" data-action="setup">
             <span class="mode-tag">⚽ Football</span>
