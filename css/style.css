@@ -98,6 +98,14 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
 .mode-desc { color: var(--muted); }
 .mode-cta { margin-top: 6px; color: var(--gold); font-weight: 700; }
 
+.sport-switch {
+  display: inline-flex; gap: 4px; padding: 4px; margin: 0 auto 22px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.sport-switch button { border: 0; background: transparent; color: var(--muted); padding: 8px 18px; border-radius: 999px; font-weight: 700; }
+.sport-switch button.on { background: var(--gold); color: #1a0b00; }
+.pokedex .sport-switch { margin: 0; align-self: flex-start; }
+
 .pokedex-link {
   margin: 22px auto 0; display: inline-flex; align-items: baseline; gap: 10px;
   background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 12px 22px; font-weight: 700;

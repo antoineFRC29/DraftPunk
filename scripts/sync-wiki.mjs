@@ -1,14 +1,12 @@
-// Récupère depuis Wikipedia (en) et Wikidata la taille, l'année de naissance, le nombre
-// de sélections en équipe nationale A, les clubs (si data.js ne les donne pas) et la photo
-// de chaque joueur de js/data.js, puis écrit js/wiki.js.
-// Usage : node scripts/sync-wiki.mjs            (tous les joueurs)
-//         node scripts/sync-wiki.mjs --new      (seulement ceux absents de js/wiki.js)
-//         node scripts/sync-wiki.mjs "Nom" ...  (seulement ces joueurs)
+// Complète les bases de joueurs depuis Wikipedia (en) et Wikidata, puis écrit le fichier généré.
+//   Football (js/data.js -> js/wiki.js)    : taille, naissance, sélections en équipe A, clubs, photo.
+//   NBA      (js/nba.js  -> js/wiki-nba.js) : taille, naissance, franchises, draft, université, photo.
+// Usage : node scripts/sync-wiki.mjs [--sport nba]            (tous les joueurs)
+//         node scripts/sync-wiki.mjs [--sport nba] --new      (seulement ceux absents du fichier généré)
+//         node scripts/sync-wiki.mjs [--sport nba] "Nom" ...  (seulement ces joueurs)
 import { readFile, writeFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
-const src = await readFile(new URL("js/data.js", root), "utf8");
-const PLAYERS = new Function(`${src}; return PLAYERS;`)();
 
 const UA = { "User-Agent": "DraftPunk/1.0 (jeu de draft local)" };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -23,7 +21,8 @@ async function getJSON(url, tries = 6) {
 }
 
 // Unités Wikidata
-const METRE = "Q11573", CENTIMETRE = "Q174728";
+const METRE = "Q11573", CENTIMETRE = "Q174728", FOOT = "Q3710", INCH = "Q218593";
+const TO_CM = { [METRE]: 100, [CENTIMETRE]: 1, [FOOT]: 30.48, [INCH]: 2.54 };
 
 function claim(claims, prop) {
   const list = claims[prop] || [];
@@ -31,24 +30,35 @@ function claim(claims, prop) {
   return best?.mainsnak?.datavalue?.value;
 }
 
-// En cas d'échec sur un joueur, on garde la valeur de la synchro précédente.
-let previous = {};
-try {
-  previous = new Function(`${await readFile(new URL("js/wiki.js", root), "utf8")}; return WIKI;`)();
-} catch {}
+// Valeur d'infobox débarrassée des références, modèles et liens.
+function clean(value) {
+  return value
+    .replace(/<ref[^>]*\/>|<ref[^>]*>.*?<\/ref>|<!--.*?-->|\{\{[^{}]*\}\}/g, "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")   // [[Lien|texte]] -> texte
+    .replace(/\[\[([^\]]*)\]\]/g, "$1")
+    .split("|")[0]                                   // plusieurs champs sur une même ligne
+    .replace(/'''?|→|\((loan|on loan)\)/gi, "")
+    .trim();
+}
 
 // Champs numérotés de l'infobox (clubs1, clubs2…), texte nettoyé, dans l'ordre.
 function infoboxList(wikitext, key) {
   return [...wikitext.matchAll(new RegExp(`\\|\\s*${key}(\\d+)\\s*=([^\\n]*)`, "g"))]
-    .map(m => [Number(m[1]), m[2]
-      .replace(/<ref[^>]*\/>|<ref[^>]*>.*?<\/ref>|<!--.*?-->|\{\{[^{}]*\}\}/g, "")
-      .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")   // [[Lien|texte]] -> texte
-      .replace(/\[\[([^\]]*)\]\]/g, "$1")
-      .split("|")[0]                                   // plusieurs champs sur une même ligne
-      .replace(/'''?|→|\((loan|on loan)\)/gi, "")
-      .trim()])
+    .map(m => [Number(m[1]), clean(m[2])])
     .sort((a, b) => a[0] - b[0]);
 }
+
+// Champ simple de l'infobox (college = …), texte nettoyé.
+function infoboxField(wikitext, key) {
+  const m = wikitext.match(new RegExp(`\\|\\s*${key}\\s*=([^\\n]*)`));
+  return m ? clean(m[1]) : "";
+}
+
+const unique = list => [...new Set(list.filter(Boolean))];
+
+// ---------- Football ----------
 
 // Sélections en équipe A (national_teamN / national_capsN, parfois sans "_").
 // Les équipes de jeunes, olympiques et de beach soccer sont ignorées ; on garde l'équipe A la plus jouée.
@@ -82,21 +92,83 @@ const CLUB_FR = {
 const RESERVE = /\b(B|C|II|III)$|Atlètic|Castilla|Reserves|Jong |Next Gen|Primavera|U-?\d{2}|under-|youth|indoor|amateur/i;
 
 function seniorClubs(wikitext) {
-  const seen = new Set();
-  return infoboxList(wikitext, "clubs")
+  return unique(infoboxList(wikitext, "clubs")
     .map(([, c]) => c)
     .filter(c => c && !RESERVE.test(c))
     .map(c => c.replace(/\s*\([^)]*\)$/, ""))
-    .map(c => CLUB_FR[c] || c)
-    .filter(c => !seen.has(c) && seen.add(c));
+    .map(c => CLUB_FR[c] || c));
 }
+
+// ---------- NBA ----------
+
+// Draft : "Choix n°1 (2003)", ou "Non drafté (2011)". Champs draft_year ou draftyear selon les pages.
+function draft(wikitext) {
+  const year = (infoboxField(wikitext, "draft_?year").match(/\d{4}/) || [])[0];
+  const pick = parseInt(infoboxField(wikitext, "draft_?pick"), 10);
+  if (year && pick > 0) return `Choix n°${pick} (${year})`;
+  if (year) return `Non drafté (${year})`;
+  return null;
+}
+
+// Équipes professionnelles (team1, team2…) ; on retire les mentions entre parenthèses.
+function proTeams(wikitext) {
+  return unique(infoboxList(wikitext, "team").map(([, t]) => t.replace(/\s*\([^)]*\)$/, "")));
+}
+
+// ---------- Sports ----------
+
+const SPORTS = {
+  foot: {
+    data: "js/data.js", dataVar: "PLAYERS", out: "js/wiki.js", outVar: "WIKI",
+    infobox: /\{\{\s*Infobox football biography/i,
+    required: ["y", "h", "caps", "photo", "clubs"],
+    extract(wt, p, entry) {
+      const caps = seniorCaps(wt);
+      if (caps) entry.caps = caps;
+      if (!p.clubs) {
+        const clubs = seniorClubs(wt);
+        if (clubs.length) entry.clubs = clubs;
+      }
+    },
+  },
+  nba: {
+    data: "js/nba.js", dataVar: "NBA_PLAYERS", out: "js/wiki-nba.js", outVar: "WIKI_NBA",
+    infobox: /\{\{\s*Infobox basketball biography/i,
+    required: ["y", "h", "photo", "clubs", "draft"],
+    extract(wt, p, entry) {
+      const teams = proTeams(wt);
+      if (teams.length) entry.clubs = teams;
+      const d = draft(wt);
+      if (d) entry.draft = d;
+      const college = infoboxField(wt, "college").replace(/\s*\([^)]*\)$/, "");
+      if (college) entry.college = college;
+      // Taille officielle NBA de l'infobox (height_ft / height_in, ou {{convert|7|ft|4|in}}),
+      // plus fiable que Wikidata qui mélange parfois taille et envergure.
+      const conv = wt.match(/\|\s*height\s*=\s*\{\{convert\|(\d+)\|ft\|(\d+)/i);
+      const ft = conv ? Number(conv[1]) : parseInt(infoboxField(wt, "height_ft"), 10);
+      const inch = conv ? Number(conv[2]) : parseInt(infoboxField(wt, "height_in"), 10) || 0;
+      if (ft) entry.h = Math.round(ft * 30.48 + inch * 2.54);
+    },
+  },
+};
+
+const args = process.argv.slice(2);
+const sportId = args.includes("--sport") ? args[args.indexOf("--sport") + 1] : "foot";
+const sport = SPORTS[sportId];
+if (!sport) throw new Error(`Sport inconnu : ${sportId}`);
+const onlyNew = args.includes("--new");
+const only = args.filter((a, i) => a !== "--new" && a !== "--sport" && args[i - 1] !== "--sport");
+
+const PLAYERS = new Function(`${await readFile(new URL(sport.data, root), "utf8")}; return ${sport.dataVar};`)();
+
+// En cas d'échec sur un joueur, on garde la valeur de la synchro précédente.
+let previous = {};
+try {
+  previous = new Function(`${await readFile(new URL(sport.out, root), "utf8")}; return ${sport.outVar};`)();
+} catch {}
 
 const out = {};
 const errors = [];
-
-const args = process.argv.slice(2);
-const onlyNew = args.includes("--new");
-const only = args.filter(a => a !== "--new");
 const skip = p => (onlyNew && previous[p.name]) || (only.length && !only.includes(p.name));
 
 for (const p of PLAYERS) {
@@ -113,27 +185,20 @@ for (const p of PLAYERS) {
 
     const birth = claim(claims, "P569");
     const height = claim(claims, "P2048");
-    const unit = v => v?.unit?.split("/").pop();
 
     const entry = {
       url: sum.content_urls?.desktop?.page,
       photo: sum.thumbnail?.source || null,
     };
     if (birth) entry.y = Number(birth.time.slice(1, 5));
-    if (height) {
-      const a = Number(height.amount);
-      entry.h = Math.round(unit(height) === METRE ? a * 100 : unit(height) === CENTIMETRE ? a : a * 100);
-    }
+    if (height) entry.h = Math.round(Number(height.amount) * (TO_CM[height.unit?.split("/").pop()] || 100));
+
     const wt = (await getJSON(`https://en.wikipedia.org/w/api.php?action=parse&format=json&formatversion=2&prop=wikitext&redirects=1&page=${encodeURIComponent(sum.title)}`)).parse?.wikitext || "";
-    // Garde-fou contre une homonymie : la page doit porter une infobox de footballeur.
-    if (!/\{\{\s*Infobox football biography/i.test(wt)) throw new Error(`page sans infobox de footballeur (« ${sum.description} »)`);
-    const caps = seniorCaps(wt);
-    if (caps) entry.caps = caps;
-    if (!p.clubs) {
-      const clubs = seniorClubs(wt);
-      if (clubs.length) entry.clubs = clubs;
-    }
-    const missing = ["y", "h", "caps", "photo", "clubs"].filter(k => !entry[k] && !p[k]);
+    // Garde-fou contre une homonymie : la page doit porter l'infobox du bon sport.
+    if (!sport.infobox.test(wt)) throw new Error(`page sans infobox du sport (« ${sum.description} »)`);
+    sport.extract(wt, p, entry);
+
+    const missing = sport.required.filter(k => !entry[k] && !p[k]);
     if (missing.length) errors.push(`${p.name} : manque ${missing.join(", ")}`);
     out[p.name] = entry;
     process.stdout.write(".");
@@ -145,7 +210,7 @@ for (const p of PLAYERS) {
 }
 
 const header = `// Généré par scripts/sync-wiki.mjs depuis Wikipedia / Wikidata (${new Date().toISOString().slice(0, 10)}).\n// Ne pas modifier à la main : relancer le script.\n`;
-await writeFile(new URL("js/wiki.js", root), `${header}const WIKI = ${JSON.stringify(out, null, 2)};\n`);
+await writeFile(new URL(sport.out, root), `${header}const ${sport.outVar} = ${JSON.stringify(out, null, 2)};\n`);
 
 console.log(`\n${Object.keys(out).length}/${PLAYERS.length} joueurs synchronisés.`);
 if (errors.length) console.log("À vérifier :\n- " + errors.join("\n- "));

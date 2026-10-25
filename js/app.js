@@ -1,39 +1,73 @@
 (() => {
-  // Données éditoriales (data.js) complétées par Wikipedia / Wikidata (wiki.js).
-  const DB = PLAYERS.map(p => ({ ...p, ...(WIKI[p.name] || {}), clubs: p.clubs || WIKI[p.name]?.clubs || [] }));
+  // Fusionne les données éditoriales et celles générées depuis Wikipedia / Wikidata.
+  const buildDB = (list, wiki) => list.map(p => ({ ...p, ...(wiki[p.name] || {}), clubs: p.clubs || wiki[p.name]?.clubs || [] }));
 
-  // ---------- Postes et formations ----------
-  const SLOT = {
-    G: { label: "Gardien", short: "G", fits: ["Gardien"] },
-    D: { label: "Défenseur", short: "D", fits: ["Défenseur"] },
-    MA: { label: "Milieu / Attaquant", short: "M/A", fits: ["Milieu", "Attaquant"] },
-  };
-  const FORMATIONS = {
-    "2-2": { label: "1 gardien · 2 défenseurs · 2 milieux/attaquants", slots: ["G", "D", "D", "MA", "MA"] },
-    "1-3": { label: "1 gardien · 1 défenseur · 3 milieux/attaquants", slots: ["G", "D", "MA", "MA", "MA"] },
-  };
   // Malus de note pour un joueur placé hors de son poste.
   const HORS_POSTE = 10;
 
-  // ---------- Catégories d'indices ----------
-  const CATS = [
-    { id: "poste", label: "Poste", icon: "🧭", values: p => [p.pos] },
-    { id: "taille", label: "Taille", icon: "📏", values: p => (p.h ? [`${p.h} cm`] : []) },
-    { id: "naissance", label: "Année de naissance", short: "Né en", icon: "🎂", values: p => (p.y ? [String(p.y)] : []) },
-    { id: "recompense", label: "Récompense", icon: "🏅", values: p => p.awards || [] },
-    { id: "trophee", label: "Trophée gagné", short: "Trophée", icon: "🏆", values: p => p.trophies || [] },
-    { id: "club", label: "Club fréquenté", short: "Club", icon: "🏟️", values: p => p.clubs || [] },
-    { id: "pays", label: "Sélection nationale", short: "Pays", icon: "🌍", values: p => [p.nat] },
-    { id: "selections", label: "Nombre de sélections", short: "Sélections", icon: "🎽", values: p => (p.caps ? [`${p.caps} sélections`] : []) },
-  ];
-  const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+  // Indices communs aux deux sports.
+  const CLUE = {
+    poste: { id: "poste", label: "Poste", icon: "🧭", values: p => [p.pos] },
+    taille: { id: "taille", label: "Taille", icon: "📏", values: p => (p.h ? [`${p.h} cm`] : []) },
+    naissance: { id: "naissance", label: "Année de naissance", short: "Né en", icon: "🎂", values: p => (p.y ? [String(p.y)] : []) },
+    recompense: { id: "recompense", label: "Récompense", icon: "🏅", values: p => p.awards || [] },
+    trophee: { id: "trophee", label: "Trophée gagné", short: "Trophée", icon: "🏆", values: p => p.trophies || [] },
+    pays: { id: "pays", label: "Sélection nationale", short: "Pays", icon: "🌍", values: p => [p.nat] },
+  };
+
+  // ---------- Sports : base de joueurs, postes, formations et indices ----------
+  const SPORTS = {
+    foot: {
+      label: "Football", icon: "⚽",
+      db: buildDB(PLAYERS, WIKI),
+      slot: {
+        G: { label: "Gardien", short: "G", fits: ["Gardien"] },
+        D: { label: "Défenseur", short: "D", fits: ["Défenseur"] },
+        MA: { label: "Milieu / Attaquant", short: "M/A", fits: ["Milieu", "Attaquant"] },
+      },
+      formations: {
+        "2-2": { label: "1 gardien · 2 défenseurs · 2 milieux/attaquants", slots: ["G", "D", "D", "MA", "MA"] },
+        "1-3": { label: "1 gardien · 1 défenseur · 3 milieux/attaquants", slots: ["G", "D", "MA", "MA", "MA"] },
+      },
+      positions: [["Gardien", "Gardiens"], ["Défenseur", "Défenseurs"], ["Milieu", "Milieux"], ["Attaquant", "Attaquants"]],
+      cats: [
+        CLUE.poste, CLUE.taille, CLUE.naissance, CLUE.recompense, CLUE.trophee,
+        { id: "club", label: "Club fréquenté", short: "Club", icon: "🏟️", values: p => p.clubs || [] },
+        CLUE.pays,
+        { id: "selections", label: "Nombre de sélections", short: "Sélections", icon: "🎽", values: p => (p.caps ? [`${p.caps} sélections`] : []) },
+      ],
+    },
+    nba: {
+      label: "NBA", icon: "🏀",
+      db: buildDB(NBA_PLAYERS, WIKI_NBA),
+      slot: {
+        G: { label: "Meneur / Arrière", short: "G", fits: ["Meneur", "Arrière"] },
+        F: { label: "Ailier", short: "F", fits: ["Ailier", "Ailier fort"] },
+        C: { label: "Pivot", short: "C", fits: ["Pivot"] },
+        FC: { label: "Ailier / Pivot", short: "F/C", fits: ["Ailier", "Ailier fort", "Pivot"] },
+      },
+      formations: {
+        classique: { label: "Classique : 2 meneurs/arrières · 2 ailiers · 1 pivot", slots: ["G", "G", "F", "F", "C"] },
+        street: { label: "Street Ball : 2 meneurs/arrières · 3 ailiers/pivots", slots: ["G", "G", "FC", "FC", "FC"] },
+      },
+      positions: [["Meneur", "Meneurs"], ["Arrière", "Arrières"], ["Ailier", "Ailiers"], ["Ailier fort", "Ailiers forts"], ["Pivot", "Pivots"]],
+      cats: [
+        CLUE.poste, CLUE.taille, CLUE.naissance, CLUE.recompense, CLUE.trophee,
+        { id: "franchise", label: "Équipe", icon: "🏀", values: p => p.clubs || [] },
+        CLUE.pays,
+        { id: "draft", label: "Draft", icon: "🎯", values: p => (p.draft ? [p.draft] : []) },
+        { id: "universite", label: "Université", icon: "🎓", values: p => (p.college ? [p.college] : []) },
+      ],
+    },
+  };
+  const allOn = sp => Object.fromEntries(SPORTS[sp].cats.map(c => [c.id, true]));
 
   const DEFAULT_CFG = {
     names: ["Joueur 1", "Joueur 2"],
-    cats: { poste: true, taille: true, naissance: true, recompense: true, trophee: true, club: true, pays: true, selections: true },
+    cats: { foot: allOn("foot"), nba: allOn("nba") },
     nClues: 3,
     budget: 20,
-    formation: "2-2",
+    formation: { foot: "2-2", nba: "classique" },
   };
 
   // ---------- Utilitaires ----------
@@ -52,7 +86,17 @@
   function loadCfg() {
     try {
       const saved = JSON.parse(localStorage.getItem("draftpunk.cfg"));
-      if (saved) return { ...DEFAULT_CFG, ...saved, cats: { ...DEFAULT_CFG.cats, ...saved.cats } };
+      if (saved) {
+        // Anciennes sauvegardes : indices et formation du football à plat.
+        const cats = saved.cats && "poste" in saved.cats ? { foot: saved.cats } : saved.cats || {};
+        const formation = typeof saved.formation === "string" ? { foot: saved.formation } : saved.formation || {};
+        if (formation.nba === "small") formation.nba = "street";  // ancien nom de Street Ball
+        return {
+          ...DEFAULT_CFG, ...saved,
+          cats: { foot: { ...DEFAULT_CFG.cats.foot, ...cats.foot }, nba: { ...DEFAULT_CFG.cats.nba, ...cats.nba } },
+          formation: { ...DEFAULT_CFG.formation, ...formation },
+        };
+      }
     } catch (e) {}
     return structuredClone(DEFAULT_CFG);
   }
@@ -71,6 +115,7 @@
   const S = {
     screen: "home",
     mode: "mystery",
+    sport: "foot",  // foot ou nba, choisi sur l'accueil
     cfg: loadCfg(),
     pokePos: "",    // filtre de poste du Pokédex
     pokeQ: "",      // recherche du Pokédex
@@ -82,14 +127,20 @@
     bid: 1,         // valeur du sélecteur de mise
   };
 
+  if (SPORTS[S.cfg.sport]) S.sport = S.cfg.sport;
+
   const name = i => esc(S.cfg.names[i] || `Joueur ${i + 1}`);
   const teamOf = i => S.pool.filter(c => c.owner === i);
-  const enabledCats = () => CATS.filter(c => S.cfg.cats[c.id]);
+  const sport = () => SPORTS[S.sport];
+  const cats = () => S.cfg.cats[S.sport];
+  const catOf = id => sport().cats.find(c => c.id === id);
+  const enabledCats = () => sport().cats.filter(c => cats()[c.id]);
   const current = () => S.pool.findIndex(c => c.owner === null);
-  const slots = () => (FORMATIONS[S.cfg.formation] || FORMATIONS["2-2"]).slots;
+  const formations = () => sport().formations;
+  const slots = () => (formations()[S.cfg.formation[S.sport]] || Object.values(formations())[0]).slots;
   const teamSize = () => slots().length;
   const freeSlots = i => slots().map((t, k) => k).filter(k => !teamOf(i).some(c => c.slot === k));
-  const fits = c => SLOT[slots()[c.slot]].fits.includes(c.p.pos);
+  const fits = c => sport().slot[slots()[c.slot]].fits.includes(c.p.pos);
   const eff = c => c.p.r - (fits(c) ? 0 : HORS_POSTE);
 
   // Tire n indices en variant au maximum les catégories.
@@ -104,7 +155,8 @@
         if (b.vals.length) clues.push({ cat: b.cat, val: b.vals.pop() });
       }
     }
-    return clues.sort((a, b) => CATS.findIndex(c => c.id === a.cat) - CATS.findIndex(c => c.id === b.cat));
+    const order = id => sport().cats.findIndex(c => c.id === id);
+    return clues.sort((a, b) => order(a.cat) - order(b.cat));
   }
 
   // Précharge la photo du joueur à l'écran pour une révélation instantanée.
@@ -115,10 +167,10 @@
   function newGame() {
     // Le tirage respecte la formation : 2 gardiens, 2× les défenseurs, 2× les milieux/attaquants.
     const mystery = S.mode === "mystery";
-    const ok = mystery ? DB.filter(p => enabledCats().some(c => c.values(p).length)) : DB;
+    const ok = mystery ? sport().db.filter(p => enabledCats().some(c => c.values(p).length)) : sport().db;
     const need = {};
     slots().forEach(t => (need[t] = (need[t] || 0) + 2));
-    const picks = Object.entries(need).flatMap(([t, n]) => shuffle(ok.filter(p => SLOT[t].fits.includes(p.pos))).slice(0, n));
+    const picks = Object.entries(need).flatMap(([t, n]) => shuffle(ok.filter(p => sport().slot[t].fits.includes(p.pos))).slice(0, n));
     S.pool = shuffle(picks).map(p => ({ p, clues: mystery ? genClues(p, S.cfg.nClues) : [], owner: null, price: 0, slot: null, how: null }));
     S.budget = [S.cfg.budget, S.cfg.budget];
     S.nominator = Math.random() < 0.5 ? 0 : 1;
@@ -188,11 +240,17 @@
       actions.home();
     },
     toggleCat(el) {
-      S.cfg.cats[el.dataset.cat] = !S.cfg.cats[el.dataset.cat];
+      cats()[el.dataset.cat] = !cats()[el.dataset.cat];
       render();
     },
     nClues(el) { S.cfg.nClues = Math.max(1, Math.min(6, S.cfg.nClues + Number(el.dataset.d))); render(); },
-    formation(el) { S.cfg.formation = el.dataset.f; render(); },
+    formation(el) { S.cfg.formation[S.sport] = el.dataset.f; render(); },
+    sport(el) {
+      S.sport = S.cfg.sport = el.dataset.sport;
+      S.pokePos = "";
+      saveCfg();
+      render();
+    },
     budgetCfg(el) { S.cfg.budget = Math.max(5, Math.min(50, S.cfg.budget + Number(el.dataset.d))); render(); },
 
     step(el) {
@@ -274,8 +332,8 @@
   const fold = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
   function viewPokedex() {
-    const list = DB.slice().sort((a, b) => b.r - a.r || a.name.localeCompare(b.name, "fr"));
-    const filters = [["", "Tous"], ["Gardien", "Gardiens"], ["Défenseur", "Défenseurs"], ["Milieu", "Milieux"], ["Attaquant", "Attaquants"]];
+    const list = sport().db.slice().sort((a, b) => b.r - a.r || a.name.localeCompare(b.name, "fr"));
+    const filters = [["", "Tous"], ...sport().positions];
     return `
       <header class="topbar">
         <button class="ghost" data-action="home">← Accueil</button>
@@ -284,6 +342,7 @@
       </header>
       <section class="pokedex">
         <h2>📖 Pokédex <small><span id="pk-count">${list.length}</span> joueurs</small></h2>
+        ${sportSwitch()}
         <div class="pk-tools">
           <input type="search" data-search placeholder="Rechercher un joueur…" value="${esc(S.pokeQ)}" autocomplete="off" aria-label="Rechercher un joueur">
           <div class="cats">
@@ -315,6 +374,12 @@
     if (count) count.textContent = n;
   }
 
+  // Choix du sport (accueil et Pokédex).
+  const sportSwitch = () => `
+    <div class="sport-switch">
+      ${Object.entries(SPORTS).map(([id, sp]) => `<button class="${S.sport === id ? "on" : ""}" data-action="sport" data-sport="${id}" aria-pressed="${S.sport === id}">${sp.icon} ${sp.label}</button>`).join("")}
+    </div>`;
+
   const logo = big => `<h1 class="logo ${big ? "big" : ""}"><span>DRAFT</span><span class="punk">PUNK</span></h1>`;
 
   function silhouette() {
@@ -341,23 +406,24 @@
         <div class="helmets" aria-hidden="true"><i class="h1"></i><i class="h2"></i></div>
         ${logo(true)}
         <p class="tagline">Tronçonneurs Production</p>
+        ${sportSwitch()}
         <div class="modes">
           <button class="mode" data-action="setup" data-mode="mystery">
-            <span class="mode-tag">⚽ Football</span>
+            <span class="mode-tag">${sport().icon} ${sport().label}</span>
             <span class="mode-icon">${silhouetteSVG()}</span>
             <span class="mode-title">Mystery Machine</span>
             <span class="mode-desc">Enchéris sur des joueurs dont tu ne connais que quelques indices. Forme le meilleur 5.</span>
             <span class="mode-cta">Jouer →</span>
           </button>
           <button class="mode" data-action="setup" data-mode="special">
-            <span class="mode-tag">⚽ Football</span>
+            <span class="mode-tag">${sport().icon} ${sport().label}</span>
             <span class="mode-icon lock">🕶️</span>
             <span class="mode-title">Special One</span>
             <span class="mode-desc">Les joueurs sont connus, mais pas leur note : elle n'est révélée qu'une fois l'enchère close.</span>
             <span class="mode-cta">Jouer →</span>
           </button>
         </div>
-        <button class="pokedex-link" data-action="pokedex">📖 Pokédex <small>${DB.length} joueurs et leurs notes</small></button>
+        <button class="pokedex-link" data-action="pokedex">📖 Pokédex ${sport().label} <small>${sport().db.length} joueurs et leurs notes</small></button>
       </section>`;
   }
 
@@ -372,7 +438,7 @@
         <span class="topbar-spacer"></span>
       </header>
       <section class="setup">
-        <h2>${MODES[S.mode].title} <small>configuration</small></h2>
+        <h2>${MODES[S.mode].title} <small>${sport().icon} ${sport().label} · configuration</small></h2>
 
         <div class="panel">
           <h3>Joueurs</h3>
@@ -388,9 +454,9 @@
           <h3>Composition</h3>
           <p class="hint">Chaque joueur gagné doit être placé à un poste. Hors de son vrai poste, il perd ${HORS_POSTE} points de note.</p>
           <div class="formations">
-            ${Object.entries(FORMATIONS).map(([id, f]) => `
-              <button class="formation ${c.formation === id ? "on" : ""}" data-action="formation" data-f="${id}" aria-pressed="${c.formation === id}">
-                <span class="f-slots">${f.slots.map(t => `<i class="chip">${SLOT[t].short}</i>`).join("")}</span>
+            ${Object.entries(formations()).map(([id, f]) => `
+              <button class="formation ${c.formation[S.sport] === id ? "on" : ""}" data-action="formation" data-f="${id}" aria-pressed="${c.formation[S.sport] === id}">
+                <span class="f-slots">${f.slots.map(t => `<i class="chip">${sport().slot[t].short}</i>`).join("")}</span>
                 <span>${f.label}</span>
               </button>`).join("")}
           </div>
@@ -400,8 +466,8 @@
           <h3>Indices divulgués</h3>
           <p class="hint">Choisis les types d'indices qui peuvent apparaître sur les cartes mystères.</p>
           <div class="cats">
-            ${CATS.map(k => `
-              <button class="cat ${c.cats[k.id] ? "on" : ""}" data-action="toggleCat" data-cat="${k.id}" aria-pressed="${!!c.cats[k.id]}">
+            ${sport().cats.map(k => `
+              <button class="cat ${cats()[k.id] ? "on" : ""}" data-action="toggleCat" data-cat="${k.id}" aria-pressed="${!!cats()[k.id]}">
                 <span>${k.icon}</span>${k.label}
               </button>`).join("")}
           </div>
@@ -439,7 +505,7 @@
 
   function clueList(clues) {
     return `<ul class="clues">${clues.map(k => `
-      <li><span class="ic" aria-hidden="true">${CAT[k.cat].icon}</span><span class="lbl">${CAT[k.cat].short || CAT[k.cat].label}</span><b>${esc(k.val)}</b></li>`).join("")}
+      <li><span class="ic" aria-hidden="true">${catOf(k.cat).icon}</span><span class="lbl">${catOf(k.cat).short || catOf(k.cat).label}</span><b>${esc(k.val)}</b></li>`).join("")}
     </ul>`;
   }
 
@@ -451,8 +517,8 @@
     const cells = slots().map((t, k) => {
       const c = team.find(x => x.slot === k);
       return c
-        ? `<span class="slot filled ${fits(c) ? "" : "off"}" title="${esc(c.p.name)} · ${SLOT[t].label} · ${pts(c.price)}">${photo(c.p)}<em>${c.price}</em></span>`
-        : `<span class="slot"><small>${SLOT[t].short}</small></span>`;
+        ? `<span class="slot filled ${fits(c) ? "" : "off"}" title="${esc(c.p.name)} · ${sport().slot[t].label} · ${pts(c.price)}">${photo(c.p)}<em>${c.price}</em></span>`
+        : `<span class="slot"><small>${sport().slot[t].short}</small></span>`;
     }).join("");
     return `
       <div class="team-bar p${i} ${active ? "active" : ""}">
@@ -520,8 +586,8 @@
           <div class="m-name">${esc(c.p.name)}</div>
           <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div>
           ${placing ? "" : `<p class="placed ${fits(c) ? "ok" : "off"}">${fits(c)
-            ? `✅ Placé en ${SLOT[slots()[c.slot]].label} : bon poste`
-            : `⚠️ Placé en ${SLOT[slots()[c.slot]].label} : hors poste, −${HORS_POSTE} (note ${c.p.r} → ${eff(c)})`}</p>`}
+            ? `✅ Placé en ${sport().slot[slots()[c.slot]].label} : bon poste`
+            : `⚠️ Placé en ${sport().slot[slots()[c.slot]].label} : hors poste, −${HORS_POSTE} (note ${c.p.r} → ${eff(c)})`}</p>`}
           ${clueList(c.clues)}
         </div>`
       : `<div class="mystery ${lead}">
@@ -546,7 +612,7 @@
       ? `<p class="act-msg">${won}</p>
          <p class="act-msg"><b class="p${c.owner}c">${name(c.owner)}</b>, à quel poste le places-tu ?</p>
          <p class="hint">Hors de son vrai poste, il perd ${HORS_POSTE} points de note.</p>
-         <div class="act-row">${types.map(t => `<button class="primary p${c.owner}bg" data-action="place" data-type="${t}">${SLOT[t].label}</button>`).join("")}</div>`
+         <div class="act-row">${types.map(t => `<button class="primary p${c.owner}bg" data-action="place" data-type="${t}">${sport().slot[t].label}</button>`).join("")}</div>`
       : revealing
         ? `<p class="act-msg">${won}</p>
            <div class="act-row"><button class="primary" data-action="next" autofocus>${last ? "Voir le résultat →" : "Joueur suivant →"}</button></div>`
@@ -574,7 +640,7 @@
     const team = i => teamOf(i).sort((a, b) => a.slot - b.slot).map((c, k) => `
       <div class="reveal" style="animation-delay:${k * 120 + i * 60}ms">
         <div class="rv-top">
-          <i class="chip ${fits(c) ? "" : "off"}" title="${SLOT[slots()[c.slot]].label}">${SLOT[slots()[c.slot]].short}</i>
+          <i class="chip ${fits(c) ? "" : "off"}" title="${sport().slot[slots()[c.slot]].label}">${sport().slot[slots()[c.slot]].short}</i>
           <span class="rv-photo">${photo(c.p)}</span>
           <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${fits(c) ? "" : ` · <span class="off-txt">hors poste −${HORS_POSTE}</span>`}</div></div>
           <span class="rating">${fits(c) ? "" : `<s>${c.p.r}</s> `}${eff(c)}</span>

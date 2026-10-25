@@ -1,6 +1,6 @@
 # Draft Punk
 
-Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Deux modes football : **Mystery Machine** et **Special One**, plus un **Pokédex** des joueurs.
+Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Deux sports (**football** et **NBA**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** des joueurs de chaque sport.
 
 ## Lancer
 
@@ -23,6 +23,10 @@ puis ouvrir http://localhost:8173.
 - Quand une équipe est complète, l'autre récupère les joueurs restants, révélés un par un.
 - L'équipe avec la meilleure note cumulée gagne (départage : points restants).
 
+## NBA
+
+Les deux modes existent aussi en basket, avec ~170 joueurs NBA. Postes : meneur/arrière, ailier, pivot. Compositions : classique (2 meneurs/arrières, 2 ailiers, 1 pivot) ou Street Ball (2 meneurs/arrières, 3 ailiers/pivots). Indices propres au basket : équipes, draft, université.
+
 ## Special One
 
 Mêmes règles que Mystery Machine, mais les joueurs sont connus (photo, nom, poste, sélection) : seule leur note reste cachée, et elle n'est révélée qu'une fois l'enchère close.
@@ -34,11 +38,13 @@ Accessible depuis l'accueil : les ~380 joueurs de la base avec leur note, triés
 ## Données
 
 - `js/data.js` : ~380 joueurs, données éditoriales (poste, sélection, trophées, récompenses, note `r`, clubs facultatifs). Ajouter un joueur ici ; `wiki` donne le titre de la page Wikipedia anglaise quand il diffère du nom.
-- `js/wiki.js` : généré depuis Wikipedia / Wikidata (taille, année de naissance, sélections en équipe A, clubs quand `data.js` ne les donne pas, photo, lien). Ne pas l'éditer à la main :
+- `js/nba.js` : ~170 joueurs NBA, mêmes champs éditoriaux.
+- `js/wiki.js` et `js/wiki-nba.js` : générés depuis Wikipedia / Wikidata (taille, naissance, photo, lien ; sélections et clubs pour le foot ; franchises, draft et université pour la NBA). Ne pas l'éditer à la main :
 
 ```bash
 node scripts/sync-wiki.mjs          # tous les joueurs
 node scripts/sync-wiki.mjs --new    # seulement les joueurs ajoutés
+node scripts/sync-wiki.mjs --sport nba --new   # idem pour la NBA
 ```
 
 Les photos viennent de Wikimedia Commons (licences libres).
