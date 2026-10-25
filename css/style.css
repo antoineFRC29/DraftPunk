@@ -98,6 +98,35 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
 .mode-desc { color: var(--muted); }
 .mode-cta { margin-top: 6px; color: var(--gold); font-weight: 700; }
 
+.pokedex-link {
+  margin: 22px auto 0; display: inline-flex; align-items: baseline; gap: 10px;
+  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 12px 22px; font-weight: 700;
+}
+.pokedex-link small { color: var(--muted); font-weight: 400; }
+.pokedex-link:hover { border-color: var(--gold); }
+
+/* ---------- Pokédex ---------- */
+.pokedex { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.pokedex h2 { font-family: var(--display); font-weight: 400; margin: 0; }
+.pokedex h2 small { font-family: var(--font); color: var(--muted); font-size: .9rem; margin-left: 8px; }
+.pk-tools { display: flex; flex-direction: column; gap: 10px; }
+.pk-tools .cats { margin-top: 0; }
+.pk-tools input {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; color: var(--text);
+  padding: 12px 14px; font: inherit; font-size: 1rem;
+}
+.pk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pk-row {
+  display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px 8px 8px;
+}
+.pk-row[hidden] { display: none; }
+.pk-photo { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: var(--bg); }
+.pk-photo .photo, .pk-photo .silhouette { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.pk-id { display: flex; flex-direction: column; min-width: 0; }
+.pk-id b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-id .hint { margin: 0; font-size: .8rem; }
+
 /* ---------- Setup ---------- */
 .setup { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 .setup h2 { font-family: var(--display); font-weight: 400; margin: 0; }
@@ -119,6 +148,7 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
 }
 .cat.on { background: rgba(255, 207, 63, .12); border-color: var(--gold); color: var(--text); }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.row.first { margin-top: 0; padding-top: 0; border-top: 0; }
 .stepper { display: inline-flex; align-items: center; gap: 6px; }
 .stepper > button:not(.ghost) {
   width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); font-size: 1.2rem;
@@ -199,6 +229,7 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
 .placed.off { color: var(--p1); }
 .off-txt { color: var(--p1); }
 .rating s { font-size: .8rem; color: var(--muted); }
+.m-rating.hidden { color: var(--muted); }
 .m-name { font-family: var(--display); font-size: 1.35rem; line-height: 1.2; }
 @keyframes flip { from { opacity: 0; transform: perspective(800px) rotateY(80deg); } }
 

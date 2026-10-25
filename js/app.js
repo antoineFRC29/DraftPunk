@@ -61,9 +61,19 @@
   }
 
   // ---------- État ----------
+  // Modes de jeu : Mystery Machine (joueurs cachés derrière des indices) ou
+  // Special One (joueurs connus, seule la note est cachée jusqu'à la fin de l'enchère).
+  const MODES = {
+    mystery: { title: "Mystery Machine" },
+    special: { title: "Special One" },
+  };
+
   const S = {
     screen: "home",
+    mode: "mystery",
     cfg: loadCfg(),
+    pokePos: "",    // filtre de poste du Pokédex
+    pokeQ: "",      // recherche du Pokédex
     pool: [],       // [{ p, clues, owner, price, slot, how }] dans l'ordre de passage
     budget: [0, 0],
     nominator: 0,   // joueur qui ouvre la prochaine enchère
@@ -104,11 +114,12 @@
 
   function newGame() {
     // Le tirage respecte la formation : 2 gardiens, 2× les défenseurs, 2× les milieux/attaquants.
-    const ok = DB.filter(p => enabledCats().some(c => c.values(p).length));
+    const mystery = S.mode === "mystery";
+    const ok = mystery ? DB.filter(p => enabledCats().some(c => c.values(p).length)) : DB;
     const need = {};
     slots().forEach(t => (need[t] = (need[t] || 0) + 2));
     const picks = Object.entries(need).flatMap(([t, n]) => shuffle(ok.filter(p => SLOT[t].fits.includes(p.pos))).slice(0, n));
-    S.pool = shuffle(picks).map(p => ({ p, clues: genClues(p, S.cfg.nClues), owner: null, price: 0, slot: null, how: null }));
+    S.pool = shuffle(picks).map(p => ({ p, clues: mystery ? genClues(p, S.cfg.nClues) : [], owner: null, price: 0, slot: null, how: null }));
     S.budget = [S.cfg.budget, S.cfg.budget];
     S.nominator = Math.random() < 0.5 ? 0 : 1;
     S.auction = null;
@@ -158,9 +169,15 @@
   // ---------- Actions ----------
   const actions = {
     home() { S.screen = "home"; render(); },
-    setup() { S.screen = "setup"; render(); },
+    setup(el) {
+      if (el && el.dataset.mode) S.mode = el.dataset.mode;
+      S.screen = "setup";
+      render();
+    },
+    pokedex() { S.screen = "pokedex"; render(); },
+    pokePos(el) { S.pokePos = el.dataset.pos; render(); },
     start() {
-      if (!enabledCats().length) return;
+      if (S.mode === "mystery" && !enabledCats().length) return;
       saveCfg();
       newGame();
     },
@@ -236,6 +253,10 @@
   document.addEventListener("input", e => {
     const i = e.target.dataset.name;
     if (i !== undefined) S.cfg.names[Number(i)] = e.target.value.slice(0, 20);
+    if (e.target.dataset.search !== undefined) {
+      S.pokeQ = e.target.value;
+      filterPokedex();
+    }
   });
   // Photo introuvable : on garde la silhouette.
   document.addEventListener("error", e => {
@@ -245,7 +266,53 @@
   // ---------- Rendu ----------
   function render() {
     $app.className = `screen-${S.screen}`;
-    $app.innerHTML = { home: viewHome, setup: viewSetup, draft: viewDraft, end: viewEnd }[S.screen]();
+    $app.innerHTML = { home: viewHome, setup: viewSetup, draft: viewDraft, end: viewEnd, pokedex: viewPokedex }[S.screen]();
+    if (S.screen === "pokedex") filterPokedex();
+  }
+
+  // ---------- Pokédex ----------
+  const fold = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+  function viewPokedex() {
+    const list = DB.slice().sort((a, b) => b.r - a.r || a.name.localeCompare(b.name, "fr"));
+    const filters = [["", "Tous"], ["Gardien", "Gardiens"], ["Défenseur", "Défenseurs"], ["Milieu", "Milieux"], ["Attaquant", "Attaquants"]];
+    return `
+      <header class="topbar">
+        <button class="ghost" data-action="home">← Accueil</button>
+        ${logo(false)}
+        <span class="topbar-spacer"></span>
+      </header>
+      <section class="pokedex">
+        <h2>📖 Pokédex <small><span id="pk-count">${list.length}</span> joueurs</small></h2>
+        <div class="pk-tools">
+          <input type="search" data-search placeholder="Rechercher un joueur…" value="${esc(S.pokeQ)}" autocomplete="off" aria-label="Rechercher un joueur">
+          <div class="cats">
+            ${filters.map(([v, l]) => `<button class="cat ${S.pokePos === v ? "on" : ""}" data-action="pokePos" data-pos="${v}" aria-pressed="${S.pokePos === v}">${l}</button>`).join("")}
+          </div>
+        </div>
+        <ol class="pk-list">
+          ${list.map(p => `
+            <li class="pk-row" data-q="${esc(fold(p.name))}" data-pos="${esc(p.pos)}">
+              <span class="pk-photo">${photo(p)}</span>
+              <span class="pk-id"><b>${esc(p.name)}</b><span class="hint">${esc(p.pos)} · ${esc(p.nat)}</span></span>
+              <span class="rating">${p.r}</span>
+            </li>`).join("")}
+        </ol>
+        <p class="credit">Photos : Wikipedia / Wikimedia Commons</p>
+      </section>`;
+  }
+
+  // Filtre sur place, sans re-rendu, pour garder le focus dans le champ de recherche.
+  function filterPokedex() {
+    const q = fold(S.pokeQ.trim());
+    let n = 0;
+    document.querySelectorAll(".pk-row").forEach(row => {
+      const show = (!q || row.dataset.q.includes(q)) && (!S.pokePos || row.dataset.pos === S.pokePos);
+      row.hidden = !show;
+      n += show;
+    });
+    const count = document.getElementById("pk-count");
+    if (count) count.textContent = n;
   }
 
   const logo = big => `<h1 class="logo ${big ? "big" : ""}"><span>DRAFT</span><span class="punk">PUNK</span></h1>`;
@@ -265,7 +332,7 @@
       </svg>`;
   }
   const photo = (p, cls = "") => p.photo
-    ? `<img class="photo ${cls}" data-photo src="${esc(p.photo)}" alt="${esc(p.name)}" referrerpolicy="no-referrer">`
+    ? `<img class="photo ${cls}" data-photo src="${esc(p.photo)}" alt="${esc(p.name)}" loading="lazy" referrerpolicy="no-referrer">`
     : silhouetteSVG();
 
   function viewHome() {
@@ -275,26 +342,29 @@
         ${logo(true)}
         <p class="tagline">Tronçonneurs Production</p>
         <div class="modes">
-          <button class="mode" data-action="setup">
+          <button class="mode" data-action="setup" data-mode="mystery">
             <span class="mode-tag">⚽ Football</span>
             <span class="mode-icon">${silhouetteSVG()}</span>
             <span class="mode-title">Mystery Machine</span>
             <span class="mode-desc">Enchéris sur des joueurs dont tu ne connais que quelques indices. Forme le meilleur 5.</span>
             <span class="mode-cta">Jouer →</span>
           </button>
-          <div class="mode soon">
-            <span class="mode-tag">Bientôt</span>
-            <span class="mode-icon lock">🔒</span>
-            <span class="mode-title">Autres modes</span>
-            <span class="mode-desc">D'autres sports et d'autres façons de drafter arrivent.</span>
-          </div>
+          <button class="mode" data-action="setup" data-mode="special">
+            <span class="mode-tag">⚽ Football</span>
+            <span class="mode-icon lock">🕶️</span>
+            <span class="mode-title">Special One</span>
+            <span class="mode-desc">Les joueurs sont connus, mais pas leur note : elle n'est révélée qu'une fois l'enchère close.</span>
+            <span class="mode-cta">Jouer →</span>
+          </button>
         </div>
+        <button class="pokedex-link" data-action="pokedex">📖 Pokédex <small>${DB.length} joueurs et leurs notes</small></button>
       </section>`;
   }
 
   function viewSetup() {
     const c = S.cfg;
-    const none = !enabledCats().length;
+    const mystery = S.mode === "mystery";
+    const none = mystery && !enabledCats().length;
     return `
       <header class="topbar">
         <button class="ghost" data-action="home">← Accueil</button>
@@ -302,7 +372,7 @@
         <span class="topbar-spacer"></span>
       </header>
       <section class="setup">
-        <h2>Mystery Machine <small>configuration</small></h2>
+        <h2>${MODES[S.mode].title} <small>configuration</small></h2>
 
         <div class="panel">
           <h3>Joueurs</h3>
@@ -326,7 +396,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        ${mystery ? `<div class="panel">
           <h3>Indices divulgués</h3>
           <p class="hint">Choisis les types d'indices qui peuvent apparaître sur les cartes mystères.</p>
           <div class="cats">
@@ -347,7 +417,10 @@
               <button data-action="nClues" data-d="1" ${c.nClues >= 6 ? "disabled" : ""} aria-label="Plus">+</button>
             </div>
           </div>
-          <div class="row">
+        </div>` : ""}
+
+        <div class="panel">
+          <div class="row first">
             <div>
               <h4>Budget par joueur</h4>
               <p class="hint">Points à investir dans les enchères.</p>
@@ -453,8 +526,12 @@
         </div>`
       : `<div class="mystery ${lead}">
           ${S.auction ? `<span class="m-bid">${pts(S.auction.bid)}</span>` : ""}
-          <div class="m-photo">${silhouetteSVG()}</div>
-          ${clueList(c.clues)}
+          ${S.mode === "special"
+            ? `<div class="m-photo">${photo(c.p)}<span class="m-rating hidden">?</span></div>
+               <div class="m-name">${esc(c.p.name)}</div>
+               <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${c.p.y ? ` · né en ${c.p.y}` : ""}</div>`
+            : `<div class="m-photo">${silhouetteSVG()}</div>
+               ${clueList(c.clues)}`}
         </div>`;
 
     const won = c.owner === null ? "" : c.how === "auto"

@@ -1,6 +1,6 @@
 # Draft Punk
 
-Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. V1 : mode **Mystery Machine** (football).
+Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Deux modes football : **Mystery Machine** et **Special One**, plus un **Pokédex** des joueurs.
 
 ## Lancer
 
@@ -22,6 +22,14 @@ puis ouvrir http://localhost:8173.
 - Un joueur à 0 point ne peut plus enchérir : l'adversaire prend ou lui laisse chaque joueur gratuitement.
 - Quand une équipe est complète, l'autre récupère les joueurs restants, révélés un par un.
 - L'équipe avec la meilleure note cumulée gagne (départage : points restants).
+
+## Special One
+
+Mêmes règles que Mystery Machine, mais les joueurs sont connus (photo, nom, poste, sélection) : seule leur note reste cachée, et elle n'est révélée qu'une fois l'enchère close.
+
+## Pokédex
+
+Accessible depuis l'accueil : les ~380 joueurs de la base avec leur note, triés de la meilleure à la moins bonne, avec recherche par nom et filtre par poste.
 
 ## Données
 
