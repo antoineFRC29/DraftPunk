@@ -1,6 +1,6 @@
 (() => {
-  // Fusionne les données éditoriales et celles générées depuis Wikipedia / Wikidata.
-  const buildDB = (list, wiki) => list.map(p => ({ ...p, ...(wiki[p.name] || {}), clubs: p.clubs || wiki[p.name]?.clubs || [] }));
+  // Fusionne les données générées depuis Wikipedia / Wikidata et les données éditoriales, qui priment.
+  const buildDB = (list, wiki) => list.map(p => ({ ...(wiki[p.name] || {}), ...p, clubs: p.clubs || wiki[p.name]?.clubs || [] }));
 
   // Malus de note pour un joueur placé hors de son poste.
   const HORS_POSTE = 10;
@@ -15,7 +15,9 @@
     pays: { id: "pays", label: "Sélection nationale", short: "Pays", icon: "🌍", values: p => [p.nat] },
   };
 
-  // ---------- Sports : base de joueurs, postes, formations et indices ----------
+  const MUSIC_GENRES = ["Rock", "Rap US", "Rap FR", "Techno", "Électro", "Pop", "Soul & Funk", "Reggae", "Chanson", "Monde"];
+
+  // ---------- Thèmes : base de joueurs, postes, formations et indices ----------
   const SPORTS = {
     foot: {
       label: "Football", icon: "⚽",
@@ -59,15 +61,34 @@
         { id: "universite", label: "Université", icon: "🎓", values: p => (p.college ? [p.college] : []) },
       ],
     },
+    music: {
+      label: "DOUREUHHH", icon: "🎪",
+      unrated: true,    // pas de note ni de vainqueur : la line-up est une affaire de goût
+      unit: "artiste",
+      desc: {
+        mystery: "Enchéris sur des artistes dont tu ne connais que quelques indices. Compose ta line-up de festival.",
+        special: "Les artistes sont connus d'avance : à toi de les arracher à l'enchère pour composer ta line-up.",
+      },
+      db: buildDB(ARTISTS, WIKI_MUSIC).map(a => ({ ...a, pos: a.genre })),
+      slot: { A: { label: "Line-up", short: "★", fits: MUSIC_GENRES } },
+      formations: { lineup: { label: "5 artistes", slots: ["A", "A", "A", "A", "A"] } },
+      positions: MUSIC_GENRES.map(g => [g, g]),
+      cats: [
+        { id: "date", label: "Naissance / formation", short: "Date", icon: "📅", values: p => (p.date ? [p.date] : []) },
+        { id: "titre", label: "Titre", icon: "🎵", values: p => p.songs || [] },
+        { id: "album", label: "Album", icon: "💿", values: p => p.albums || [] },
+        { id: "nationalite", label: "Nationalité", short: "Pays", icon: "🌍", values: p => [p.nat] },
+      ],
+    },
   };
   const allOn = sp => Object.fromEntries(SPORTS[sp].cats.map(c => [c.id, true]));
 
   const DEFAULT_CFG = {
     names: ["Joueur 1", "Joueur 2"],
-    cats: { foot: allOn("foot"), nba: allOn("nba") },
+    cats: Object.fromEntries(Object.keys(SPORTS).map(sp => [sp, allOn(sp)])),
     nClues: 3,
     budget: 20,
-    formation: { foot: "2-2", nba: "classique" },
+    formation: { foot: "2-2", nba: "classique", music: "lineup" },
   };
 
   // ---------- Utilitaires ----------
@@ -93,7 +114,7 @@
         if (formation.nba === "small") formation.nba = "street";  // ancien nom de Street Ball
         return {
           ...DEFAULT_CFG, ...saved,
-          cats: { foot: { ...DEFAULT_CFG.cats.foot, ...cats.foot }, nba: { ...DEFAULT_CFG.cats.nba, ...cats.nba } },
+          cats: Object.fromEntries(Object.keys(SPORTS).map(sp => [sp, { ...DEFAULT_CFG.cats[sp], ...cats[sp] }])),
           formation: { ...DEFAULT_CFG.formation, ...formation },
         };
       }
@@ -115,7 +136,7 @@
   const S = {
     screen: "home",
     mode: "mystery",
-    sport: "foot",  // foot ou nba, choisi sur l'accueil
+    sport: "foot",  // foot, nba ou music, choisi sur l'accueil
     cfg: loadCfg(),
     pokePos: "",    // filtre de poste du Pokédex
     pokeQ: "",      // recherche du Pokédex
@@ -132,6 +153,8 @@
   const name = i => esc(S.cfg.names[i] || `Joueur ${i + 1}`);
   const teamOf = i => S.pool.filter(c => c.owner === i);
   const sport = () => SPORTS[S.sport];
+  const unit = () => sport().unit || "joueur";
+  const rated = () => !sport().unrated;
   const cats = () => S.cfg.cats[S.sport];
   const catOf = id => sport().cats.find(c => c.id === id);
   const enabledCats = () => sport().cats.filter(c => cats()[c.id]);
@@ -332,7 +355,7 @@
   const fold = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
   function viewPokedex() {
-    const list = sport().db.slice().sort((a, b) => b.r - a.r || a.name.localeCompare(b.name, "fr"));
+    const list = sport().db.slice().sort((a, b) => (rated() ? b.r - a.r : 0) || a.name.localeCompare(b.name, "fr"));
     const filters = [["", "Tous"], ...sport().positions];
     return `
       <header class="topbar">
@@ -341,10 +364,10 @@
         <span class="topbar-spacer"></span>
       </header>
       <section class="pokedex">
-        <h2>📖 Pokédex <small><span id="pk-count">${list.length}</span> joueurs</small></h2>
+        <h2>📖 Pokédex <small><span id="pk-count">${list.length}</span> ${unit()}s</small></h2>
         ${sportSwitch()}
         <div class="pk-tools">
-          <input type="search" data-search placeholder="Rechercher un joueur…" value="${esc(S.pokeQ)}" autocomplete="off" aria-label="Rechercher un joueur">
+          <input type="search" data-search placeholder="Rechercher un ${unit()}…" value="${esc(S.pokeQ)}" autocomplete="off" aria-label="Rechercher un ${unit()}">
           <div class="cats">
             ${filters.map(([v, l]) => `<button class="cat ${S.pokePos === v ? "on" : ""}" data-action="pokePos" data-pos="${v}" aria-pressed="${S.pokePos === v}">${l}</button>`).join("")}
           </div>
@@ -354,7 +377,7 @@
             <li class="pk-row" data-q="${esc(fold(p.name))}" data-pos="${esc(p.pos)}">
               <span class="pk-photo">${photo(p)}</span>
               <span class="pk-id"><b>${esc(p.name)}</b><span class="hint">${esc(p.pos)} · ${esc(p.nat)}</span></span>
-              <span class="rating">${p.r}</span>
+              ${rated() ? `<span class="rating">${p.r}</span>` : ""}
             </li>`).join("")}
         </ol>
         <p class="credit">Photos : Wikipedia / Wikimedia Commons</p>
@@ -412,18 +435,18 @@
             <span class="mode-tag">${sport().icon} ${sport().label}</span>
             <span class="mode-icon">${silhouetteSVG()}</span>
             <span class="mode-title">Mystery Machine</span>
-            <span class="mode-desc">Enchéris sur des joueurs dont tu ne connais que quelques indices. Forme le meilleur 5.</span>
+            <span class="mode-desc">${sport().desc?.mystery || "Enchéris sur des joueurs dont tu ne connais que quelques indices. Forme le meilleur 5."}</span>
             <span class="mode-cta">Jouer →</span>
           </button>
           <button class="mode" data-action="setup" data-mode="special">
             <span class="mode-tag">${sport().icon} ${sport().label}</span>
             <span class="mode-icon lock">🕶️</span>
             <span class="mode-title">Special One</span>
-            <span class="mode-desc">Les joueurs sont connus, mais pas leur note : elle n'est révélée qu'une fois l'enchère close.</span>
+            <span class="mode-desc">${sport().desc?.special || "Les joueurs sont connus, mais pas leur note : elle n'est révélée qu'une fois l'enchère close."}</span>
             <span class="mode-cta">Jouer →</span>
           </button>
         </div>
-        <button class="pokedex-link" data-action="pokedex">📖 Pokédex ${sport().label} <small>${sport().db.length} joueurs et leurs notes</small></button>
+        <button class="pokedex-link" data-action="pokedex">📖 Pokédex ${sport().label} <small>${sport().db.length} ${unit()}s${rated() ? " et leurs notes" : ""}</small></button>
       </section>`;
   }
 
@@ -450,7 +473,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        ${Object.keys(formations()).length > 1 ? `<div class="panel">
           <h3>Composition</h3>
           <p class="hint">Chaque joueur gagné doit être placé à un poste. Hors de son vrai poste, il perd ${HORS_POSTE} points de note.</p>
           <div class="formations">
@@ -460,7 +483,7 @@
                 <span>${f.label}</span>
               </button>`).join("")}
           </div>
-        </div>
+        </div>` : ""}
 
         ${mystery ? `<div class="panel">
           <h3>Indices divulgués</h3>
@@ -474,8 +497,8 @@
           ${none ? `<p class="warn">Active au moins un type d'indice.</p>` : ""}
           <div class="row">
             <div>
-              <h4>Nombre d'indices par joueur</h4>
-              <p class="hint">Les indices de liste (club, trophée…) peuvent sortir plusieurs fois.</p>
+              <h4>Nombre d'indices par ${unit()}</h4>
+              <p class="hint">Un même type d'indice peut sortir plusieurs fois s'il a plusieurs valeurs.</p>
             </div>
             <div class="stepper">
               <button data-action="nClues" data-d="-1" ${c.nClues <= 1 ? "disabled" : ""} aria-label="Moins">−</button>
@@ -542,10 +565,10 @@
   function actionPanel(ph) {
     if (ph.type === "free") {
       const msg = ph.both
-        ? `Plus personne n'a de points : on se répartit les derniers joueurs gratuitement.`
-        : `${name(ph.other)} n'a plus de points et récupèrera les joueurs que tu laisses.`;
+        ? `Plus personne n'a de points : on se répartit les derniers ${unit()}s gratuitement.`
+        : `${name(ph.other)} n'a plus de points et récupèrera les ${unit()}s que tu laisses.`;
       return `
-        <p class="act-msg"><b class="p${ph.picker}c">${name(ph.picker)}</b>, tu prends ce joueur ?</p>
+        <p class="act-msg"><b class="p${ph.picker}c">${name(ph.picker)}</b>, tu prends cet${unit() === "joueur" ? "" : "te"} ${unit()} ?</p>
         <p class="hint">${msg}</p>
         <div class="act-row">
           <button class="primary p${ph.picker}bg" data-action="take">Prendre gratuitement</button>
@@ -582,10 +605,10 @@
 
     const face = revealing
       ? `<div class="mystery revealed p${c.owner}">
-          <div class="m-photo">${photo(c.p)}<span class="m-rating">${placing ? c.p.r : eff(c)}</span></div>
+          <div class="m-photo">${photo(c.p)}${rated() ? `<span class="m-rating">${placing ? c.p.r : eff(c)}</span>` : ""}</div>
           <div class="m-name">${esc(c.p.name)}</div>
           <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div>
-          ${placing ? "" : `<p class="placed ${fits(c) ? "ok" : "off"}">${fits(c)
+          ${placing || !rated() ? "" : `<p class="placed ${fits(c) ? "ok" : "off"}">${fits(c)
             ? `✅ Placé en ${sport().slot[slots()[c.slot]].label} : bon poste`
             : `⚠️ Placé en ${sport().slot[slots()[c.slot]].label} : hors poste, −${HORS_POSTE} (note ${c.p.r} → ${eff(c)})`}</p>`}
           ${clueList(c.clues)}
@@ -593,18 +616,18 @@
       : `<div class="mystery ${lead}">
           ${S.auction ? `<span class="m-bid">${pts(S.auction.bid)}</span>` : ""}
           ${S.mode === "special"
-            ? `<div class="m-photo">${photo(c.p)}<span class="m-rating hidden">?</span></div>
+            ? `<div class="m-photo">${photo(c.p)}${rated() ? `<span class="m-rating hidden">?</span>` : ""}</div>
                <div class="m-name">${esc(c.p.name)}</div>
-               <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${c.p.y ? ` · né en ${c.p.y}` : ""}</div>`
+               <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${rated() ? (c.p.y ? ` · né en ${c.p.y}` : "") : c.p.date ? ` · ${esc(c.p.date)}` : ""}</div>`
             : `<div class="m-photo">${silhouetteSVG()}</div>
                ${clueList(c.clues)}`}
         </div>`;
 
     const won = c.owner === null ? "" : c.how === "auto"
-      ? `📦 L'équipe adverse est complète : <b class="p${c.owner}c">${name(c.owner)}</b> récupère ce joueur.`
+      ? `📦 L'équipe adverse est complète : <b class="p${c.owner}c">${name(c.owner)}</b> récupère ${unit() === "joueur" ? "ce joueur" : "cet artiste"}.`
       : c.price
         ? `🔨 Adjugé à <b class="p${c.owner}c">${name(c.owner)}</b> pour <b>${pts(c.price)}</b>.`
-        : `🎁 <b class="p${c.owner}c">${name(c.owner)}</b> récupère ce joueur gratuitement.`;
+        : `🎁 <b class="p${c.owner}c">${name(c.owner)}</b> récupère ${unit() === "joueur" ? "ce joueur" : "cet artiste"} gratuitement.`;
     const types = placing ? [...new Set(freeSlots(c.owner).map(k => slots()[k]))] : [];
     const last = !S.pool.some(x => x.owner === null);
 
@@ -615,7 +638,7 @@
          <div class="act-row">${types.map(t => `<button class="primary p${c.owner}bg" data-action="place" data-type="${t}">${sport().slot[t].label}</button>`).join("")}</div>`
       : revealing
         ? `<p class="act-msg">${won}</p>
-           <div class="act-row"><button class="primary" data-action="next" autofocus>${last ? "Voir le résultat →" : "Joueur suivant →"}</button></div>`
+           <div class="act-row"><button class="primary" data-action="next" autofocus>${last ? "Voir le résultat →" : `${unit() === "joueur" ? "Joueur" : "Artiste"} suivant →`}</button></div>`
         : actionPanel(ph);
 
     return `
@@ -629,10 +652,11 @@
         ${face}
         <div class="action">${action}</div>
       </section>
-      <p class="credit">Photos et mensurations : Wikipedia / Wikidata</p>`;
+      <p class="credit">${rated() ? "Photos et mensurations" : "Photos et dates"} : Wikipedia / Wikidata</p>`;
   }
 
   function viewEnd() {
+    if (!rated()) return viewLineups();
     const score = i => teamOf(i).reduce((s, c) => s + eff(c), 0);
     const sc = [score(0), score(1)];
     const winner = sc[0] === sc[1] ? (S.budget[0] === S.budget[1] ? -1 : S.budget[0] > S.budget[1] ? 0 : 1) : sc[0] > sc[1] ? 0 : 1;
@@ -671,7 +695,42 @@
           <button class="primary big" data-action="replay">Rejouer</button>
           <button class="ghost" data-action="setup">Changer les réglages</button>
         </div>
-        <p class="credit">Photos et mensurations : Wikipedia / Wikidata</p>
+        <p class="credit">${rated() ? "Photos et mensurations" : "Photos et dates"} : Wikipedia / Wikidata</p>
+      </section>`;
+  }
+
+  // Fin de partie sans note : pas de vainqueur, chacun repart avec sa line-up,
+  // de la tête d'affiche (l'enchère la plus chère) au reste de l'affiche.
+  function viewLineups() {
+    const lineup = i => teamOf(i).sort((a, b) => b.price - a.price).map((c, k) => `
+      <div class="reveal" style="animation-delay:${k * 120 + i * 60}ms">
+        <div class="rv-top">
+          <span class="rv-photo">${photo(c.p)}</span>
+          <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div></div>
+        </div>
+        <div class="price">${pts(c.price)}</div>
+      </div>`).join("");
+    return `
+      <header class="topbar">
+        <button class="ghost" data-action="home">← Accueil</button>
+        ${logo(false)}
+        <button class="ghost" data-action="setup">Réglages</button>
+      </header>
+      <section class="end">
+        <h2 class="winner">🎪 Les line-ups sont prêtes !</h2>
+        <div class="teams">
+          ${[0, 1].map(i => `
+            <div class="team p${i}">
+              <div class="team-head"><span class="pname">${name(i)}</span></div>
+              <p class="hint">${S.cfg.budget - S.budget[i]} pts dépensés · ${S.budget[i]} restants</p>
+              ${lineup(i)}
+            </div>`).join("")}
+        </div>
+        <div class="end-actions">
+          <button class="primary big" data-action="replay">Rejouer</button>
+          <button class="ghost" data-action="setup">Changer les réglages</button>
+        </div>
+        <p class="credit">Photos et dates : Wikipedia / Wikidata</p>
       </section>`;
   }
 

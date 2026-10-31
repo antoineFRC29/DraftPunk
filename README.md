@@ -1,6 +1,6 @@
 # Draft Punk
 
-Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Deux sports (**football** et **NBA**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** des joueurs de chaque sport.
+Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Trois thèmes (**football**, **NBA** et **DOUREUHHH**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** par thème.
 
 ## Lancer
 
@@ -27,6 +27,13 @@ puis ouvrir http://localhost:8173.
 
 Les deux modes existent aussi en basket, avec ~170 joueurs NBA. Postes : meneur/arrière, ailier, pivot. Compositions : classique (2 meneurs/arrières, 2 ailiers, 1 pivot) ou Street Ball (2 meneurs/arrières, 3 ailiers/pivots). Indices propres au basket : équipes, draft, université.
 
+## DOUREUHHH
+
+On drafte 5 artistes pour composer une line-up de festival, parmi ~320 groupes et solos (rock, rap US, rap FR, techno, électro, pop, soul, reggae, chanson…). Mêmes enchères que les autres thèmes, mais sans note, sans poste et sans vainqueur : à la fin, chacun compare sa line-up, de la plus chère à la moins chère.
+
+- **Mystery Machine** : artistes cachés. Indices : date de naissance ou de formation, titre, album, nationalité.
+- **Special One** : artistes connus d'avance.
+
 ## Special One
 
 Mêmes règles que Mystery Machine, mais les joueurs sont connus (photo, nom, poste, sélection) : seule leur note reste cachée, et elle n'est révélée qu'une fois l'enchère close.
@@ -39,12 +46,14 @@ Accessible depuis l'accueil : les ~380 joueurs de la base avec leur note, triés
 
 - `js/data.js` : ~380 joueurs, données éditoriales (poste, sélection, trophées, récompenses, note `r`, clubs facultatifs). Ajouter un joueur ici ; `wiki` donne le titre de la page Wikipedia anglaise quand il diffère du nom.
 - `js/nba.js` : ~170 joueurs NBA, mêmes champs éditoriaux.
-- `js/wiki.js` et `js/wiki-nba.js` : générés depuis Wikipedia / Wikidata (taille, naissance, photo, lien ; sélections et clubs pour le foot ; franchises, draft et université pour la NBA). Ne pas l'éditer à la main :
+- `js/music.js` : ~320 artistes (genre, nationalité, 3 titres, 3 albums).
+- `js/wiki.js`, `js/wiki-nba.js` et `js/wiki-music.js` : générés depuis Wikipedia / Wikidata (photo, lien, naissance ou formation ; taille, sélections et clubs pour le foot ; taille, franchises, draft et université pour la NBA). Ne pas les éditer à la main :
 
 ```bash
 node scripts/sync-wiki.mjs          # tous les joueurs
 node scripts/sync-wiki.mjs --new    # seulement les joueurs ajoutés
-node scripts/sync-wiki.mjs --sport nba --new   # idem pour la NBA
+node scripts/sync-wiki.mjs --sport nba --new     # idem pour la NBA
+node scripts/sync-wiki.mjs --sport music --new   # idem pour les artistes
 ```
 
 Les photos viennent de Wikimedia Commons (licences libres).

@@ -1,9 +1,10 @@
 // Complète les bases de joueurs depuis Wikipedia (en) et Wikidata, puis écrit le fichier généré.
 //   Football (js/data.js -> js/wiki.js)    : taille, naissance, sélections en équipe A, clubs, photo.
 //   NBA      (js/nba.js  -> js/wiki-nba.js) : taille, naissance, franchises, draft, université, photo.
-// Usage : node scripts/sync-wiki.mjs [--sport nba]            (tous les joueurs)
-//         node scripts/sync-wiki.mjs [--sport nba] --new      (seulement ceux absents du fichier généré)
-//         node scripts/sync-wiki.mjs [--sport nba] "Nom" ...  (seulement ces joueurs)
+//   Artistes (js/music.js -> js/wiki-music.js) : date de naissance ou de formation, photo.
+// Usage : node scripts/sync-wiki.mjs [--sport nba|music]            (tous les joueurs)
+//         node scripts/sync-wiki.mjs [--sport nba|music] --new      (seulement ceux absents du fichier généré)
+//         node scripts/sync-wiki.mjs [--sport nba|music] "Nom" ...  (seulement ces joueurs)
 import { readFile, writeFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
@@ -115,6 +116,29 @@ function proTeams(wikitext) {
   return unique(infoboxList(wikitext, "team").map(([, t]) => t.replace(/\s*\([^)]*\)$/, "")));
 }
 
+// ---------- Artistes ----------
+
+const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+// Date Wikidata lisible, selon sa précision (9 = année, 10 = mois, 11 = jour).
+function frenchDate({ time, precision }) {
+  const [, year, month, day] = time.match(/^[+-](\d+)-(\d+)-(\d+)/);
+  if (precision >= 11) return `${Number(day) === 1 ? "1er" : Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+  if (precision === 10) return `${MONTHS[Number(month) - 1]} ${year}`;
+  return year;
+}
+
+// Une personne a une date de naissance (P569), un groupe une date de formation (P571).
+function artistDate(claims) {
+  const birth = claim(claims, "P569");
+  if (birth) return `Naissance : ${frenchDate(birth)}`;
+  const formed = claim(claims, "P571");
+  return formed ? `Formation : ${frenchDate(formed)}` : null;
+}
+
+// Garde-fou contre une homonymie : la description Wikipedia doit parler de musique.
+const MUSIC_PAGE = /band|singer|rapper|musician|artist|\bdj\b|duo|group|producer|songwriter|composer|vocalist|project|hip hop|collective|supergroup|groupe|chanteu|rappeu|musicien|compositeu|compositrice|interprète|producteur|parolier/i;
+
 // ---------- Sports ----------
 
 const SPORTS = {
@@ -150,6 +174,16 @@ const SPORTS = {
       if (ft) entry.h = Math.round(ft * 30.48 + inch * 2.54);
     },
   },
+  music: {
+    data: "js/music.js", dataVar: "ARTISTS", out: "js/wiki-music.js", outVar: "WIKI_MUSIC",
+    required: ["date", "photo"],
+    langs: ["en", "fr"],     // beaucoup d'artistes français n'ont une page qu'en français
+    accepts: sum => MUSIC_PAGE.test(sum.description || sum.extract || ""),
+    fromClaims(claims, entry) {
+      const date = artistDate(claims);
+      if (date) entry.date = date;
+    },
+  },
 };
 
 const args = process.argv.slice(2);
@@ -158,6 +192,24 @@ const sport = SPORTS[sportId];
 if (!sport) throw new Error(`Sport inconnu : ${sportId}`);
 const onlyNew = args.includes("--new");
 const only = args.filter((a, i) => a !== "--new" && a !== "--sport" && args[i - 1] !== "--sport");
+
+// Résumé Wikipedia : première langue où la page existe et correspond au bon sujet.
+async function findSummary(p) {
+  const problems = [];
+  for (const lang of sport.langs || ["en"]) {
+    const title = lang === "en" ? p.wiki || p.name : p.wikiFr || p.name;
+    try {
+      const sum = await getJSON(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_")).replace(/'/g, "%27")}`);
+      if (sum.type === "disambiguation" || !sum.wikibase_item) problems.push(`${lang} : page ambiguë ou sans Wikidata`);
+      else if (sport.accepts && !sport.accepts(sum)) problems.push(`${lang} : hors sujet (« ${sum.description} »)`);
+      else return sum;
+    } catch (e) {
+      problems.push(`${lang} : ${e.message}`);
+    }
+    await sleep(300);
+  }
+  throw new Error(problems.join(" ; "));
+}
 
 const PLAYERS = new Function(`${await readFile(new URL(sport.data, root), "utf8")}; return ${sport.dataVar};`)();
 
@@ -178,8 +230,7 @@ for (const p of PLAYERS) {
   }
   const title = p.wiki || p.name;
   try {
-    const sum = await getJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_")).replace(/'/g, "%27")}`);
-    if (sum.type === "disambiguation" || !sum.wikibase_item) throw new Error(`page ambiguë ou sans Wikidata`);
+    const sum = await findSummary(p);
     const ent = await getJSON(`https://www.wikidata.org/wiki/Special:EntityData/${sum.wikibase_item}.json`);
     const claims = Object.values(ent.entities)[0].claims;
 
@@ -190,13 +241,22 @@ for (const p of PLAYERS) {
       url: sum.content_urls?.desktop?.page,
       photo: sum.thumbnail?.source || null,
     };
+    // Pas de photo dans cette langue : on la cherche dans l'autre.
+    for (const lang of sport.langs || []) {
+      if (entry.photo) break;
+      const other = await getJSON(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent((lang === "en" ? p.wiki || p.name : p.wikiFr || p.name).replace(/ /g, "_")).replace(/'/g, "%27")}`).catch(() => null);
+      if (other?.wikibase_item === sum.wikibase_item) entry.photo = other.thumbnail?.source || null;
+    }
     if (birth) entry.y = Number(birth.time.slice(1, 5));
     if (height) entry.h = Math.round(Number(height.amount) * (TO_CM[height.unit?.split("/").pop()] || 100));
 
-    const wt = (await getJSON(`https://en.wikipedia.org/w/api.php?action=parse&format=json&formatversion=2&prop=wikitext&redirects=1&page=${encodeURIComponent(sum.title)}`)).parse?.wikitext || "";
-    // Garde-fou contre une homonymie : la page doit porter l'infobox du bon sport.
-    if (!sport.infobox.test(wt)) throw new Error(`page sans infobox du sport (« ${sum.description} »)`);
-    sport.extract(wt, p, entry);
+    if (sport.fromClaims) sport.fromClaims(claims, entry);
+    if (sport.infobox) {
+      const wt = (await getJSON(`https://en.wikipedia.org/w/api.php?action=parse&format=json&formatversion=2&prop=wikitext&redirects=1&page=${encodeURIComponent(sum.title)}`)).parse?.wikitext || "";
+      // Garde-fou contre une homonymie : la page doit porter l'infobox du bon sport.
+      if (!sport.infobox.test(wt)) throw new Error(`page sans infobox du sport (« ${sum.description} »)`);
+      sport.extract(wt, p, entry);
+    }
 
     const missing = sport.required.filter(k => !entry[k] && !p[k]);
     if (missing.length) errors.push(`${p.name} : manque ${missing.join(", ")}`);

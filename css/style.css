@@ -299,6 +299,7 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
   .slot em { display: none; }
   .coins b { font-size: 1.2rem; }
   .topbar .logo { font-size: 1rem; }
+  .sport-switch button { padding: 8px 11px; font-size: .9rem; }
   .topbar-spacer, .counter { min-width: 0; width: auto; }
   .row { flex-direction: column; align-items: flex-start; }
 }
