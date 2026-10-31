@@ -64,7 +64,8 @@
     music: {
       label: "DOUREUHHH", icon: "🎪",
       unrated: true,    // pas de note ni de vainqueur : la line-up est une affaire de goût
-      unit: "artiste",
+      unit: "artiste", thisUnit: "cet artiste",
+      endTitle: "🎪 Les line-ups sont prêtes !",
       desc: {
         mystery: "Enchéris sur des artistes dont tu ne connais que quelques indices. Compose ta line-up de festival.",
         special: "Les artistes sont connus d'avance : à toi de les arracher à l'enchère pour composer ta line-up.",
@@ -80,6 +81,36 @@
         { id: "nationalite", label: "Nationalité", short: "Pays", icon: "🌍", values: p => [p.nat] },
       ],
     },
+    cinema: {
+      label: "Coupez!", icon: "🎬",
+      unrated: true,
+      strict: true,     // chacun doit remplir chaque rôle : pas de placement hors poste
+      unit: "talent", thisUnit: "ce talent",
+      endTitle: "🎬 Les castings sont prêts !",
+      // Genre du film, tiré au sort à chaque partie et imposé aux deux joueurs.
+      briefLabel: "Genre imposé",
+      briefs: ["Comédie romantique", "Comédie", "Action", "Film d'auteur", "Horreur", "Aventure", "Science-fiction", "Thriller", "Drame", "Western", "Fantastique", "Policier", "Comédie musicale", "Film de guerre"],
+      desc: {
+        mystery: "Enchéris sur des talents dont tu ne connais que quelques indices. Monte ton casting : 4 acteurs, un réal, un compositeur.",
+        special: "Les talents sont connus d'avance : à toi de les arracher à l'enchère pour monter ton film.",
+      },
+      db: buildDB(PEOPLE, WIKI_CINEMA),
+      slot: {
+        L: { label: "Premier rôle", short: "1er", fits: ["Acteur", "Actrice"] },
+        S: { label: "Second rôle", short: "2nd", fits: ["Acteur", "Actrice"] },
+        R: { label: "Réalisation", short: "Réal", fits: ["Réalisateur", "Réalisatrice"] },
+        C: { label: "Musique", short: "Mus", fits: ["Compositeur", "Compositrice"] },
+      },
+      formations: { casting: { label: "2 premiers rôles · 2 seconds rôles · réalisation · musique", slots: ["L", "L", "S", "S", "R", "C"] } },
+      positions: [["Acteur", "Acteurs"], ["Actrice", "Actrices"], ["Réalisateur", "Réalisateurs"], ["Réalisatrice", "Réalisatrices"], ["Compositeur", "Compositeurs"], ["Compositrice", "Compositrices"]],
+      // Le métier reste visible sur la carte mystère : sans lui, impossible de savoir pour quel rôle on enchérit.
+      job: p => (/^(Acteur|Actrice)$/.test(p.pos) ? "🎭 Acteur ou actrice" : /^R/.test(p.pos) ? "🎬 Réalisation" : "🎼 Musique"),
+      cats: [
+        { id: "date", label: "Date de naissance", short: "Naissance", icon: "📅", values: p => (p.date ? [p.date.replace("Naissance : ", "")] : []) },
+        { id: "nationalite", label: "Pays", icon: "🌍", values: p => [p.nat] },
+        { id: "film", label: "Film", icon: "🎞️", values: p => p.films || [] },
+      ],
+    },
   };
   const allOn = sp => Object.fromEntries(SPORTS[sp].cats.map(c => [c.id, true]));
 
@@ -88,7 +119,7 @@
     cats: Object.fromEntries(Object.keys(SPORTS).map(sp => [sp, allOn(sp)])),
     nClues: 3,
     budget: 20,
-    formation: { foot: "2-2", nba: "classique", music: "lineup" },
+    formation: { foot: "2-2", nba: "classique", music: "lineup", cinema: "casting" },
   };
 
   // ---------- Utilitaires ----------
@@ -136,7 +167,7 @@
   const S = {
     screen: "home",
     mode: "mystery",
-    sport: "foot",  // foot, nba ou music, choisi sur l'accueil
+    sport: "foot",  // foot, nba, music ou cinema, choisi sur l'accueil
     cfg: loadCfg(),
     pokePos: "",    // filtre de poste du Pokédex
     pokeQ: "",      // recherche du Pokédex
@@ -145,6 +176,7 @@
     nominator: 0,   // joueur qui ouvre la prochaine enchère
     auction: null,  // { bid, leader, turn }
     reveal: null,   // index du joueur qui vient d'être attribué : révélé, puis placé à un poste
+    brief: null,    // contrainte tirée au sort pour la partie (genre du film)
     bid: 1,         // valeur du sélecteur de mise
   };
 
@@ -154,6 +186,7 @@
   const teamOf = i => S.pool.filter(c => c.owner === i);
   const sport = () => SPORTS[S.sport];
   const unit = () => sport().unit || "joueur";
+  const thisUnit = () => sport().thisUnit || "ce joueur";
   const rated = () => !sport().unrated;
   const cats = () => S.cfg.cats[S.sport];
   const catOf = id => sport().cats.find(c => c.id === id);
@@ -163,7 +196,10 @@
   const slots = () => (formations()[S.cfg.formation[S.sport]] || Object.values(formations())[0]).slots;
   const teamSize = () => slots().length;
   const freeSlots = i => slots().map((t, k) => k).filter(k => !teamOf(i).some(c => c.slot === k));
-  const fits = c => sport().slot[slots()[c.slot]].fits.includes(c.p.pos);
+  const fitsSlot = (t, p) => sport().slot[t].fits.includes(p.pos);
+  // Places qu'un joueur peut donner à cette carte : toutes, ou seulement celles du métier en mode strict.
+  const placeable = (i, c) => freeSlots(i).filter(k => !sport().strict || fitsSlot(slots()[k], c.p));
+  const fits = c => fitsSlot(slots()[c.slot], c.p);
   const eff = c => c.p.r - (fits(c) ? 0 : HORS_POSTE);
 
   // Tire n indices en variant au maximum les catégories.
@@ -193,8 +229,11 @@
     const ok = mystery ? sport().db.filter(p => enabledCats().some(c => c.values(p).length)) : sport().db;
     const need = {};
     slots().forEach(t => (need[t] = (need[t] || 0) + 2));
-    const picks = Object.entries(need).flatMap(([t, n]) => shuffle(ok.filter(p => sport().slot[t].fits.includes(p.pos))).slice(0, n));
+    const picks = [];
+    Object.entries(need).forEach(([t, n]) => picks.push(...shuffle(ok.filter(p => fitsSlot(t, p) && !picks.includes(p))).slice(0, n)));
     S.pool = shuffle(picks).map(p => ({ p, clues: mystery ? genClues(p, S.cfg.nClues) : [], owner: null, price: 0, slot: null, how: null }));
+    const briefs = sport().briefs;
+    S.brief = briefs ? briefs[Math.floor(Math.random() * briefs.length)] : null;
     S.budget = [S.cfg.budget, S.cfg.budget];
     S.nominator = Math.random() < 0.5 ? 0 : 1;
     S.auction = null;
@@ -209,6 +248,10 @@
     const need = [0, 1].map(i => teamSize() - teamOf(i).length);
     if (need[0] <= 0) return { type: "auto", to: 1 };
     if (need[1] <= 0) return { type: "auto", to: 0 };
+    // Rôle déjà pourvu chez l'un : la carte revient d'office à l'autre, sans enchère.
+    const open = [0, 1].map(i => placeable(i, S.pool[current()]).length > 0);
+    if (!open[0]) return { type: "auto", to: 1 };
+    if (!open[1]) return { type: "auto", to: 0 };
     const can = [0, 1].map(i => S.budget[i] > 0);
     if (can[0] && can[1]) return { type: "auction" };
     if (can[0] !== can[1]) return { type: "free", picker: can[0] ? 0 : 1, other: can[0] ? 1 : 0 };
@@ -223,7 +266,7 @@
     c.price = price;
     c.how = how;
     S.budget[owner] -= price;
-    const free = freeSlots(owner);
+    const free = placeable(owner, c);
     if (new Set(free.map(k => slots()[k])).size === 1) c.slot = free[0];
     S.reveal = idx;
     render();
@@ -311,7 +354,7 @@
     },
     place(el) {
       const c = S.pool[S.reveal];
-      c.slot = freeSlots(c.owner).find(k => slots()[k] === el.dataset.type);
+      c.slot = placeable(c.owner, c).find(k => slots()[k] === el.dataset.type);
       render();
     },
     next() {
@@ -553,6 +596,8 @@
       </div>`;
   }
 
+  const briefBanner = () => (S.brief ? `<p class="brief">${sport().briefLabel} : <b>${esc(S.brief)}</b></p>` : "");
+
   function stepper(min, max) {
     return `
       <div class="stepper bid">
@@ -568,7 +613,7 @@
         ? `Plus personne n'a de points : on se répartit les derniers ${unit()}s gratuitement.`
         : `${name(ph.other)} n'a plus de points et récupèrera les ${unit()}s que tu laisses.`;
       return `
-        <p class="act-msg"><b class="p${ph.picker}c">${name(ph.picker)}</b>, tu prends cet${unit() === "joueur" ? "" : "te"} ${unit()} ?</p>
+        <p class="act-msg"><b class="p${ph.picker}c">${name(ph.picker)}</b>, tu prends ${thisUnit()} ?</p>
         <p class="hint">${msg}</p>
         <div class="act-row">
           <button class="primary p${ph.picker}bg" data-action="take">Prendre gratuitement</button>
@@ -608,6 +653,7 @@
           <div class="m-photo">${photo(c.p)}${rated() ? `<span class="m-rating">${placing ? c.p.r : eff(c)}</span>` : ""}</div>
           <div class="m-name">${esc(c.p.name)}</div>
           <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div>
+          ${!rated() && !placing && Object.keys(sport().slot).length > 1 ? `<p class="placed ok">✅ ${sport().slot[slots()[c.slot]].label}</p>` : ""}
           ${placing || !rated() ? "" : `<p class="placed ${fits(c) ? "ok" : "off"}">${fits(c)
             ? `✅ Placé en ${sport().slot[slots()[c.slot]].label} : bon poste`
             : `⚠️ Placé en ${sport().slot[slots()[c.slot]].label} : hors poste, −${HORS_POSTE} (note ${c.p.r} → ${eff(c)})`}</p>`}
@@ -620,25 +666,26 @@
                <div class="m-name">${esc(c.p.name)}</div>
                <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${rated() ? (c.p.y ? ` · né en ${c.p.y}` : "") : c.p.date ? ` · ${esc(c.p.date)}` : ""}</div>`
             : `<div class="m-photo">${silhouetteSVG()}</div>
+               ${sport().job ? `<p class="placed">${sport().job(c.p)}</p>` : ""}
                ${clueList(c.clues)}`}
         </div>`;
 
     const won = c.owner === null ? "" : c.how === "auto"
-      ? `📦 L'équipe adverse est complète : <b class="p${c.owner}c">${name(c.owner)}</b> récupère ${unit() === "joueur" ? "ce joueur" : "cet artiste"}.`
+      ? `📦 ${sport().strict ? "Ce rôle est déjà pourvu chez l'adversaire" : "L'équipe adverse est complète"} : <b class="p${c.owner}c">${name(c.owner)}</b> récupère ${thisUnit()}.`
       : c.price
         ? `🔨 Adjugé à <b class="p${c.owner}c">${name(c.owner)}</b> pour <b>${pts(c.price)}</b>.`
-        : `🎁 <b class="p${c.owner}c">${name(c.owner)}</b> récupère ${unit() === "joueur" ? "ce joueur" : "cet artiste"} gratuitement.`;
-    const types = placing ? [...new Set(freeSlots(c.owner).map(k => slots()[k]))] : [];
+        : `🎁 <b class="p${c.owner}c">${name(c.owner)}</b> récupère ${thisUnit()} gratuitement.`;
+    const types = placing ? [...new Set(placeable(c.owner, c).map(k => slots()[k]))] : [];
     const last = !S.pool.some(x => x.owner === null);
 
     const action = placing
       ? `<p class="act-msg">${won}</p>
-         <p class="act-msg"><b class="p${c.owner}c">${name(c.owner)}</b>, à quel poste le places-tu ?</p>
-         <p class="hint">Hors de son vrai poste, il perd ${HORS_POSTE} points de note.</p>
+         <p class="act-msg"><b class="p${c.owner}c">${name(c.owner)}</b>, à quel ${rated() ? "poste" : "rôle"} le places-tu ?</p>
+         ${rated() ? `<p class="hint">Hors de son vrai poste, il perd ${HORS_POSTE} points de note.</p>` : ""}
          <div class="act-row">${types.map(t => `<button class="primary p${c.owner}bg" data-action="place" data-type="${t}">${sport().slot[t].label}</button>`).join("")}</div>`
       : revealing
         ? `<p class="act-msg">${won}</p>
-           <div class="act-row"><button class="primary" data-action="next" autofocus>${last ? "Voir le résultat →" : `${unit() === "joueur" ? "Joueur" : "Artiste"} suivant →`}</button></div>`
+           <div class="act-row"><button class="primary" data-action="next" autofocus>${last ? "Voir le résultat →" : `${unit()[0].toUpperCase()}${unit().slice(1)} suivant →`}</button></div>`
         : actionPanel(ph);
 
     return `
@@ -647,6 +694,7 @@
         ${logo(false)}
         <span class="counter">${Math.min(done + (revealing ? 0 : 1), S.pool.length)} / ${S.pool.length}</span>
       </header>
+      ${briefBanner()}
       <section class="teams-bar">${teamPanel(0, ph)}${teamPanel(1, ph)}</section>
       <section class="stage">
         ${face}
@@ -699,12 +747,14 @@
       </section>`;
   }
 
-  // Fin de partie sans note : pas de vainqueur, chacun repart avec sa line-up,
-  // de la tête d'affiche (l'enchère la plus chère) au reste de l'affiche.
+  // Fin de partie sans note : pas de vainqueur, chacun repart avec sa line-up, de la tête
+  // d'affiche (l'enchère la plus chère) au reste de l'affiche, ou avec son casting, rôle par rôle.
   function viewLineups() {
-    const lineup = i => teamOf(i).sort((a, b) => b.price - a.price).map((c, k) => `
+    const roles = Object.keys(sport().slot).length > 1;
+    const lineup = i => teamOf(i).sort((a, b) => (roles ? a.slot - b.slot : b.price - a.price)).map((c, k) => `
       <div class="reveal" style="animation-delay:${k * 120 + i * 60}ms">
         <div class="rv-top">
+          ${roles ? `<i class="chip" title="${sport().slot[slots()[c.slot]].label}">${sport().slot[slots()[c.slot]].short}</i>` : ""}
           <span class="rv-photo">${photo(c.p)}</span>
           <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div></div>
         </div>
@@ -717,7 +767,8 @@
         <button class="ghost" data-action="setup">Réglages</button>
       </header>
       <section class="end">
-        <h2 class="winner">🎪 Les line-ups sont prêtes !</h2>
+        <h2 class="winner">${sport().endTitle}</h2>
+        ${briefBanner()}
         <div class="teams">
           ${[0, 1].map(i => `
             <div class="team p${i}">

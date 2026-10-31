@@ -99,7 +99,7 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
 .mode-cta { margin-top: 6px; color: var(--gold); font-weight: 700; }
 
 .sport-switch {
-  display: inline-flex; gap: 4px; padding: 4px; margin: 0 auto 22px; border-radius: 999px;
+  display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; margin: 0 auto 22px; border-radius: 24px;
   background: var(--surface); border: 1px solid var(--line);
 }
 .sport-switch button { border: 0; background: transparent; color: var(--muted); padding: 8px 18px; border-radius: 999px; font-weight: 700; }
@@ -190,7 +190,7 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
 .pname { font-weight: 700; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .coins { color: var(--muted); white-space: nowrap; }
 .coins b { font-family: var(--display); font-size: 1.6rem; color: var(--gold); font-weight: 400; }
-.slots { display: flex; gap: 8px; }
+.slots { display: flex; flex-wrap: wrap; gap: 8px; }
 .slot {
   position: relative; width: 48px; height: 48px; border-radius: 50%; border: 1px dashed var(--line);
   flex: none; display: grid; place-items: center;
@@ -206,6 +206,9 @@ button.mode:hover { transform: translateY(-3px); border-color: var(--gold); box-
   display: grid; place-items: center;
 }
 
+.brief { text-align: center; margin: 0 0 14px; color: var(--muted); }
+.brief b { color: var(--gold); font-family: var(--display); font-weight: 400; }
+.end .brief { margin: 0; }
 .stage { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .mystery {
   position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--line);

@@ -2,9 +2,10 @@
 //   Football (js/data.js -> js/wiki.js)    : taille, naissance, sélections en équipe A, clubs, photo.
 //   NBA      (js/nba.js  -> js/wiki-nba.js) : taille, naissance, franchises, draft, université, photo.
 //   Artistes (js/music.js -> js/wiki-music.js) : date de naissance ou de formation, photo.
-// Usage : node scripts/sync-wiki.mjs [--sport nba|music]            (tous les joueurs)
-//         node scripts/sync-wiki.mjs [--sport nba|music] --new      (seulement ceux absents du fichier généré)
-//         node scripts/sync-wiki.mjs [--sport nba|music] "Nom" ...  (seulement ces joueurs)
+//   Cinéma   (js/cinema.js -> js/wiki-cinema.js) : date de naissance, photo.
+// Usage : node scripts/sync-wiki.mjs [--sport nba|music|cinema]            (tous les joueurs)
+//         node scripts/sync-wiki.mjs [--sport nba|music|cinema] --new      (seulement ceux absents du fichier généré)
+//         node scripts/sync-wiki.mjs [--sport nba|music|cinema] "Nom" ...  (seulement ces joueurs)
 import { readFile, writeFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
@@ -139,6 +140,8 @@ function artistDate(claims) {
 // Garde-fou contre une homonymie : la description Wikipedia doit parler de musique.
 const MUSIC_PAGE = /band|singer|rapper|musician|artist|\bdj\b|duo|group|producer|songwriter|composer|vocalist|project|hip hop|collective|supergroup|groupe|chanteu|rappeu|musicien|compositeu|compositrice|interprète|producteur|parolier/i;
 
+const CINEMA_PAGE = /actor|actress|film|director|composer|comedian|screenwriter|musician|acteur|actrice|réalisat|cinéaste|compositeu|compositrice|humoriste|scénariste/i;
+
 // ---------- Sports ----------
 
 const SPORTS = {
@@ -182,6 +185,16 @@ const SPORTS = {
     fromClaims(claims, entry) {
       const date = artistDate(claims);
       if (date) entry.date = date;
+    },
+  },
+  cinema: {
+    data: "js/cinema.js", dataVar: "PEOPLE", out: "js/wiki-cinema.js", outVar: "WIKI_CINEMA",
+    required: ["date", "photo"],
+    langs: ["en", "fr"],
+    accepts: sum => CINEMA_PAGE.test(sum.description || sum.extract || ""),
+    fromClaims(claims, entry) {
+      const birth = claim(claims, "P569");
+      if (birth) entry.date = `Naissance : ${frenchDate(birth)}`;
     },
   },
 };

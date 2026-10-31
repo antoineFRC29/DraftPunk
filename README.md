@@ -1,6 +1,6 @@
 # Draft Punk
 
-Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Trois thèmes (**football**, **NBA** et **DOUREUHHH**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** par thème.
+Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Quatre thèmes (**football**, **NBA**, **DOUREUHHH** et **Coupez!**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** par thème.
 
 ## Lancer
 
@@ -34,6 +34,16 @@ On drafte 5 artistes pour composer une line-up de festival, parmi ~320 groupes e
 - **Mystery Machine** : artistes cachés. Indices : date de naissance ou de formation, titre, album, nationalité.
 - **Special One** : artistes connus d'avance.
 
+## Coupez!
+
+On monte un film : 2 premiers rôles, 2 seconds rôles, une réalisation et une musique, parmi ~420 talents. Mêmes enchères que les autres thèmes, sans note ni vainqueur.
+
+- Un genre de film (comédie, horreur, western…) est tiré au sort à chaque partie et imposé aux deux joueurs. Il sert de contrainte de casting : les talents proposés ne dépendent pas du genre.
+- Le tirage compte 12 talents : 8 acteurs ou actrices, 2 réalisateurs, 2 compositeurs. Le métier reste visible sur la carte, même dans le mode à indices.
+- Pas de hors-poste : un joueur dont le rôle est déjà pourvu ne peut pas enchérir, et la carte revient d'office à l'adversaire.
+- **Mystery Machine** : talents cachés. Indices : date de naissance, pays, film.
+- **Special One** : talents connus d'avance.
+
 ## Special One
 
 Mêmes règles que Mystery Machine, mais les joueurs sont connus (photo, nom, poste, sélection) : seule leur note reste cachée, et elle n'est révélée qu'une fois l'enchère close.
@@ -47,13 +57,15 @@ Accessible depuis l'accueil : les ~380 joueurs de la base avec leur note, triés
 - `js/data.js` : ~380 joueurs, données éditoriales (poste, sélection, trophées, récompenses, note `r`, clubs facultatifs). Ajouter un joueur ici ; `wiki` donne le titre de la page Wikipedia anglaise quand il diffère du nom.
 - `js/nba.js` : ~170 joueurs NBA, mêmes champs éditoriaux.
 - `js/music.js` : ~320 artistes (genre, nationalité, 3 titres, 3 albums).
-- `js/wiki.js`, `js/wiki-nba.js` et `js/wiki-music.js` : générés depuis Wikipedia / Wikidata (photo, lien, naissance ou formation ; taille, sélections et clubs pour le foot ; taille, franchises, draft et université pour la NBA). Ne pas les éditer à la main :
+- `js/cinema.js` : ~420 talents (métier, pays, 5 films).
+- `js/wiki.js`, `js/wiki-nba.js`, `js/wiki-music.js` et `js/wiki-cinema.js` : générés depuis Wikipedia / Wikidata (photo, lien, naissance ou formation ; taille, sélections et clubs pour le foot ; taille, franchises, draft et université pour la NBA). Ne pas les éditer à la main :
 
 ```bash
 node scripts/sync-wiki.mjs          # tous les joueurs
 node scripts/sync-wiki.mjs --new    # seulement les joueurs ajoutés
 node scripts/sync-wiki.mjs --sport nba --new     # idem pour la NBA
 node scripts/sync-wiki.mjs --sport music --new   # idem pour les artistes
+node scripts/sync-wiki.mjs --sport cinema --new  # idem pour le cinéma
 ```
 
 Les photos viennent de Wikimedia Commons (licences libres).
