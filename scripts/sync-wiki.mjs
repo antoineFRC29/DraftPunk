@@ -3,9 +3,11 @@
 //   NBA      (js/nba.js  -> js/wiki-nba.js) : taille, naissance, franchises, draft, université, photo.
 //   Artistes (js/music.js -> js/wiki-music.js) : date de naissance ou de formation, photo.
 //   Cinéma   (js/cinema.js -> js/wiki-cinema.js) : date de naissance, photo.
-// Usage : node scripts/sync-wiki.mjs [--sport nba|music|cinema]            (tous les joueurs)
-//         node scripts/sync-wiki.mjs [--sport nba|music|cinema] --new      (seulement ceux absents du fichier généré)
-//         node scripts/sync-wiki.mjs [--sport nba|music|cinema] "Nom" ...  (seulement ces joueurs)
+//   Rugby    (js/rugby.js -> js/wiki-rugby.js) : taille, poids, naissance, clubs, sélections, photo.
+// Usage : node scripts/sync-wiki.mjs [--sport nba|music|cinema|rugby]            (tous les joueurs)
+//         node scripts/sync-wiki.mjs [--sport nba|music|cinema|rugby] --new      (seulement ceux absents du fichier généré)
+//         node scripts/sync-wiki.mjs [--sport nba|music|cinema|rugby] "Nom" ...  (seulement ces joueurs)
+//         node scripts/sync-wiki.mjs [--sport nba|music|cinema|rugby] --from 140 (reprise à partir du rang 140)
 import { readFile, writeFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
@@ -18,6 +20,16 @@ async function getJSON(url, tries = 6) {
     const r = await fetch(url, { headers: UA });
     if (r.ok) return r.json();
     if (r.status !== 429 || i >= tries) throw new Error(`${r.status} ${url}`);
+    await sleep((Number(r.headers.get("retry-after")) || 2 * (i + 1)) * 1000);
+  }
+}
+
+// Texte source d'une page. action=raw n'a pas la limite de 31 s par appel de l'API action=parse.
+async function getWikitext(title, tries = 6) {
+  for (let i = 0; ; i++) {
+    const r = await fetch(`https://en.wikipedia.org/w/index.php?action=raw&title=${encodeURIComponent(title.replace(/ /g, "_"))}`, { headers: UA });
+    if (r.ok) return r.text();
+    if (r.status !== 429 || i >= tries) throw new Error(`${r.status} ${title}`);
     await sleep((Number(r.headers.get("retry-after")) || 2 * (i + 1)) * 1000);
   }
 }
@@ -35,8 +47,10 @@ function claim(claims, prop) {
 // Valeur d'infobox débarrassée des références, modèles et liens.
 function clean(value) {
   return value
+    .replace(/\{\{\s*(?:rut|rugby union team)\s*\|([^|}]+)[^}]*\}\}/gi, "$1")   // {{Rut|Toulon}} -> Toulon
     .replace(/<ref[^>]*\/>|<ref[^>]*>.*?<\/ref>|<!--.*?-->|\{\{[^{}]*\}\}/g, "")
     .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")   // [[Lien|texte]] -> texte
     .replace(/\[\[([^\]]*)\]\]/g, "$1")
@@ -64,10 +78,10 @@ const unique = list => [...new Set(list.filter(Boolean))];
 
 // Sélections en équipe A (national_teamN / national_capsN, parfois sans "_").
 // Les équipes de jeunes, olympiques et de beach soccer sont ignorées ; on garde l'équipe A la plus jouée.
-function seniorCaps(wikitext) {
-  const teams = Object.fromEntries(infoboxList(wikitext, "national_?team"));
-  const caps = Object.fromEntries(infoboxList(wikitext, "national_?caps"));
-  const youth = /U-?\d{2}|under|olympic|youth|beach|\bB\b/i;
+function seniorCaps(wikitext, teamKey = "national_?team", capsKey = "national_?caps") {
+  const teams = Object.fromEntries(infoboxList(wikitext, teamKey));
+  const caps = Object.fromEntries(infoboxList(wikitext, capsKey));
+  const youth = /U-?\d{2}|under|olympic|youth|beach|sevens|\bB\b/i;
   const counts = Object.keys(teams)
     .filter(k => !youth.test(teams[k]))
     .map(k => parseInt(caps[k], 10))
@@ -93,12 +107,28 @@ const CLUB_FR = {
 // Équipes réserves, B, jeunes : ignorées.
 const RESERVE = /\b(B|C|II|III)$|Atlètic|Castilla|Reserves|Jong |Next Gen|Primavera|U-?\d{2}|under-|youth|indoor|amateur/i;
 
-function seniorClubs(wikitext) {
-  return unique(infoboxList(wikitext, "clubs")
+function seniorClubs(wikitext, key = "clubs") {
+  return unique(infoboxList(wikitext, key)
     .map(([, c]) => c)
     .filter(c => c && !RESERVE.test(c))
     .map(c => c.replace(/\s*\([^)]*\)$/, ""))
     .map(c => CLUB_FR[c] || c));
+}
+
+// ---------- Rugby ----------
+
+// Mesure brute de l'infobox : {{convert|178|cm|…}}, {{convert|6|ft|2|in|…}}, "1.74 m", "89 kg"…
+function measure(wikitext, key) {
+  const raw = wikitext.match(new RegExp(`\\|\\s*${key}\\s*=([^\\n]*)`))?.[1] || "";
+  const conv = raw.match(/\{\{\s*convert\s*\|\s*([\d.]+)\s*\|\s*(\w+)(?:\s*\|\s*([\d.]+)\s*\|\s*in)?/i);
+  const [, value, unit, inches] = conv || raw.match(/([\d.]+)\s*(m|cm|kg|lb|st)\b/) || [];
+  const n = Number(value);
+  if (!n) return null;
+  if (unit === "m") return Math.round(n * 100);
+  if (unit === "ft") return Math.round(n * 30.48 + Number(inches || 0) * 2.54);
+  if (unit === "lb") return Math.round(n * 0.4536);
+  if (unit === "st") return Math.round(n * 6.35);
+  return Math.round(n);
 }
 
 // ---------- NBA ----------
@@ -177,6 +207,27 @@ const SPORTS = {
       if (ft) entry.h = Math.round(ft * 30.48 + inch * 2.54);
     },
   },
+  rugby: {
+    data: "js/rugby.js", dataVar: "RUGBY_PLAYERS", out: "js/wiki-rugby.js", outVar: "WIKI_RUGBY",
+    infobox: /\{\{\s*Infobox rugby (union |league )?biography/i,
+    required: ["y", "h", "w", "caps", "photo", "clubs"],
+    extract(wt, p, entry) {
+      const caps = seniorCaps(wt, "repteam", "repcaps");
+      if (caps) entry.caps = caps;
+      // Clubs, franchises de Super Rugby et provinces sont dans des champs séparés.
+      const clubs = seniorClubs(wt, "(?:clubs|super|province)");
+      if (clubs.length) entry.clubs = clubs;
+      const h = measure(wt, "height");
+      if (h) entry.h = h;
+      const w = measure(wt, "weight");
+      if (w) entry.w = w;
+      if (entry.w > 160) delete entry.w;   // valeur aberrante d'une source
+    },
+    fromClaims(claims, entry) {
+      const mass = claim(claims, "P2067");
+      if (mass && (!mass.unit || mass.unit.endsWith("Q11570"))) entry.w = Math.round(Number(mass.amount));
+    },
+  },
   music: {
     data: "js/music.js", dataVar: "ARTISTS", out: "js/wiki-music.js", outVar: "WIKI_MUSIC",
     required: ["date", "photo"],
@@ -204,7 +255,9 @@ const sportId = args.includes("--sport") ? args[args.indexOf("--sport") + 1] : "
 const sport = SPORTS[sportId];
 if (!sport) throw new Error(`Sport inconnu : ${sportId}`);
 const onlyNew = args.includes("--new");
-const only = args.filter((a, i) => a !== "--new" && a !== "--sport" && args[i - 1] !== "--sport");
+// --from N : reprend une synchro interrompue à partir du N-ième joueur de la base.
+const from = args.includes("--from") ? Number(args[args.indexOf("--from") + 1]) : 0;
+const only = args.filter((a, i) => !["--new", "--sport", "--from"].includes(a) && !["--sport", "--from"].includes(args[i - 1]));
 
 // Résumé Wikipedia : première langue où la page existe et correspond au bon sujet.
 async function findSummary(p) {
@@ -234,7 +287,10 @@ try {
 
 const out = {};
 const errors = [];
-const skip = p => (onlyNew && previous[p.name]) || (only.length && !only.includes(p.name));
+const header = `// Généré par scripts/sync-wiki.mjs depuis Wikipedia / Wikidata (${new Date().toISOString().slice(0, 10)}).\n// Ne pas modifier à la main : relancer le script.\n`;
+// Toujours fusionné avec la synchro précédente : une interruption ne perd rien.
+const save = () => writeFile(new URL(sport.out, root), `${header}const ${sport.outVar} = ${JSON.stringify({ ...previous, ...out }, null, 2)};\n`);
+const skip = p => PLAYERS.indexOf(p) < from || (onlyNew && previous[p.name]) || (only.length && !only.includes(p.name));
 
 for (const p of PLAYERS) {
   if (skip(p)) {
@@ -265,7 +321,7 @@ for (const p of PLAYERS) {
 
     if (sport.fromClaims) sport.fromClaims(claims, entry);
     if (sport.infobox) {
-      const wt = (await getJSON(`https://en.wikipedia.org/w/api.php?action=parse&format=json&formatversion=2&prop=wikitext&redirects=1&page=${encodeURIComponent(sum.title)}`)).parse?.wikitext || "";
+      const wt = await getWikitext(sum.title);
       // Garde-fou contre une homonymie : la page doit porter l'infobox du bon sport.
       if (!sport.infobox.test(wt)) throw new Error(`page sans infobox du sport (« ${sum.description} »)`);
       sport.extract(wt, p, entry);
@@ -275,6 +331,7 @@ for (const p of PLAYERS) {
     if (missing.length) errors.push(`${p.name} : manque ${missing.join(", ")}`);
     out[p.name] = entry;
     process.stdout.write(".");
+    if (Object.keys(out).length % 20 === 0) await save();
     await sleep(600);
   } catch (e) {
     errors.push(`${p.name} (${title}) : ${e.message}${previous[p.name] ? " (ancienne valeur conservée)" : ""}`);
@@ -282,8 +339,7 @@ for (const p of PLAYERS) {
   }
 }
 
-const header = `// Généré par scripts/sync-wiki.mjs depuis Wikipedia / Wikidata (${new Date().toISOString().slice(0, 10)}).\n// Ne pas modifier à la main : relancer le script.\n`;
-await writeFile(new URL(sport.out, root), `${header}const ${sport.outVar} = ${JSON.stringify(out, null, 2)};\n`);
+await save();
 
 console.log(`\n${Object.keys(out).length}/${PLAYERS.length} joueurs synchronisés.`);
 if (errors.length) console.log("À vérifier :\n- " + errors.join("\n- "));

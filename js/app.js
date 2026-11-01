@@ -17,6 +17,10 @@
 
   const MUSIC_GENRES = ["Rock", "Rap US", "Rap FR", "Techno", "Électro", "Pop", "Soul & Funk", "Reggae", "Chanson", "Monde"];
 
+  // Rugby : pas de poste, le Pokédex filtre par pays (les sélections les plus représentées).
+  const RUGBY_DB = buildDB(RUGBY_PLAYERS, WIKI_RUGBY).map(p => ({ ...p, pos: p.nat }));
+  const RUGBY_FILTERS = ["France", "Nouvelle-Zélande", "Afrique du Sud", "Angleterre", "Irlande", "Pays de Galles", "Écosse", "Australie", "Argentine", "Italie"];
+
   // ---------- Thèmes : base de joueurs, postes, formations et indices ----------
   const SPORTS = {
     foot: {
@@ -59,6 +63,21 @@
         CLUE.pays,
         { id: "draft", label: "Draft", icon: "🎯", values: p => (p.draft ? [p.draft] : []) },
         { id: "universite", label: "Université", icon: "🎓", values: p => (p.college ? [p.college] : []) },
+      ],
+    },
+    rugby: {
+      label: "Rugby", icon: "🏉",
+      db: RUGBY_DB,
+      slot: { A: { label: "Équipe", short: "★", fits: [...new Set(RUGBY_DB.map(p => p.pos))] } },
+      formations: { libre: { label: "5 joueurs", slots: ["A", "A", "A", "A", "A"] } },
+      positions: RUGBY_FILTERS.map(n => [n, n]),
+      cats: [
+        CLUE.taille,
+        { id: "poids", label: "Poids", icon: "⚖️", values: p => (p.w ? [`${p.w} kg`] : []) },
+        { id: "club", label: "Club fréquenté", short: "Club", icon: "🏟️", values: p => p.clubs || [] },
+        CLUE.pays,
+        { id: "selections", label: "Nombre de sélections", short: "Sélections", icon: "🎽", values: p => (p.caps ? [`${p.caps} sélections`] : []) },
+        { id: "titre", label: "Titre", icon: "🏆", values: p => p.trophies || [] },
       ],
     },
     music: {
@@ -119,7 +138,7 @@
     cats: Object.fromEntries(Object.keys(SPORTS).map(sp => [sp, allOn(sp)])),
     nClues: 3,
     budget: 20,
-    formation: { foot: "2-2", nba: "classique", music: "lineup", cinema: "casting" },
+    formation: { foot: "2-2", nba: "classique", rugby: "libre", music: "lineup", cinema: "casting" },
   };
 
   // ---------- Utilitaires ----------
@@ -167,7 +186,7 @@
   const S = {
     screen: "home",
     mode: "mystery",
-    sport: "foot",  // foot, nba, music ou cinema, choisi sur l'accueil
+    sport: "foot",  // foot, nba, rugby, music ou cinema, choisi sur l'accueil
     cfg: loadCfg(),
     pokePos: "",    // filtre de poste du Pokédex
     pokeQ: "",      // recherche du Pokédex
@@ -188,6 +207,9 @@
   const unit = () => sport().unit || "joueur";
   const thisUnit = () => sport().thisUnit || "ce joueur";
   const rated = () => !sport().unrated;
+  const hasRoles = () => Object.keys(sport().slot).length > 1;
+  // Sous-titre d'un joueur : sans poste (rugby), le pays suffit.
+  const who = p => (p.pos === p.nat ? esc(p.nat) : `${esc(p.pos)} · ${esc(p.nat)}`);
   const cats = () => S.cfg.cats[S.sport];
   const catOf = id => sport().cats.find(c => c.id === id);
   const enabledCats = () => sport().cats.filter(c => cats()[c.id]);
@@ -419,7 +441,7 @@
           ${list.map(p => `
             <li class="pk-row" data-q="${esc(fold(p.name))}" data-pos="${esc(p.pos)}">
               <span class="pk-photo">${photo(p)}</span>
-              <span class="pk-id"><b>${esc(p.name)}</b><span class="hint">${esc(p.pos)} · ${esc(p.nat)}</span></span>
+              <span class="pk-id"><b>${esc(p.name)}</b><span class="hint">${who(p)}</span></span>
               ${rated() ? `<span class="rating">${p.r}</span>` : ""}
             </li>`).join("")}
         </ol>
@@ -652,9 +674,9 @@
       ? `<div class="mystery revealed p${c.owner}">
           <div class="m-photo">${photo(c.p)}${rated() ? `<span class="m-rating">${placing ? c.p.r : eff(c)}</span>` : ""}</div>
           <div class="m-name">${esc(c.p.name)}</div>
-          <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div>
-          ${!rated() && !placing && Object.keys(sport().slot).length > 1 ? `<p class="placed ok">✅ ${sport().slot[slots()[c.slot]].label}</p>` : ""}
-          ${placing || !rated() ? "" : `<p class="placed ${fits(c) ? "ok" : "off"}">${fits(c)
+          <div class="hint">${who(c.p)}</div>
+          ${!rated() && !placing && hasRoles() ? `<p class="placed ok">✅ ${sport().slot[slots()[c.slot]].label}</p>` : ""}
+          ${placing || !rated() || !hasRoles() ? "" : `<p class="placed ${fits(c) ? "ok" : "off"}">${fits(c)
             ? `✅ Placé en ${sport().slot[slots()[c.slot]].label} : bon poste`
             : `⚠️ Placé en ${sport().slot[slots()[c.slot]].label} : hors poste, −${HORS_POSTE} (note ${c.p.r} → ${eff(c)})`}</p>`}
           ${clueList(c.clues)}
@@ -664,7 +686,7 @@
           ${S.mode === "special"
             ? `<div class="m-photo">${photo(c.p)}${rated() ? `<span class="m-rating hidden">?</span>` : ""}</div>
                <div class="m-name">${esc(c.p.name)}</div>
-               <div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${rated() ? (c.p.y ? ` · né en ${c.p.y}` : "") : c.p.date ? ` · ${esc(c.p.date)}` : ""}</div>`
+               <div class="hint">${who(c.p)}${rated() ? (c.p.y ? ` · né en ${c.p.y}` : "") : c.p.date ? ` · ${esc(c.p.date)}` : ""}</div>`
             : `<div class="m-photo">${silhouetteSVG()}</div>
                ${sport().job ? `<p class="placed">${sport().job(c.p)}</p>` : ""}
                ${clueList(c.clues)}`}
@@ -712,9 +734,9 @@
     const team = i => teamOf(i).sort((a, b) => a.slot - b.slot).map((c, k) => `
       <div class="reveal" style="animation-delay:${k * 120 + i * 60}ms">
         <div class="rv-top">
-          <i class="chip ${fits(c) ? "" : "off"}" title="${sport().slot[slots()[c.slot]].label}">${sport().slot[slots()[c.slot]].short}</i>
+          ${hasRoles() ? `<i class="chip ${fits(c) ? "" : "off"}" title="${sport().slot[slots()[c.slot]].label}">${sport().slot[slots()[c.slot]].short}</i>` : ""}
           <span class="rv-photo">${photo(c.p)}</span>
-          <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}${fits(c) ? "" : ` · <span class="off-txt">hors poste −${HORS_POSTE}</span>`}</div></div>
+          <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${who(c.p)}${fits(c) ? "" : ` · <span class="off-txt">hors poste −${HORS_POSTE}</span>`}</div></div>
           <span class="rating">${fits(c) ? "" : `<s>${c.p.r}</s> `}${eff(c)}</span>
         </div>
         <div class="price">${pts(c.price)}</div>
@@ -750,13 +772,13 @@
   // Fin de partie sans note : pas de vainqueur, chacun repart avec sa line-up, de la tête
   // d'affiche (l'enchère la plus chère) au reste de l'affiche, ou avec son casting, rôle par rôle.
   function viewLineups() {
-    const roles = Object.keys(sport().slot).length > 1;
+    const roles = hasRoles();
     const lineup = i => teamOf(i).sort((a, b) => (roles ? a.slot - b.slot : b.price - a.price)).map((c, k) => `
       <div class="reveal" style="animation-delay:${k * 120 + i * 60}ms">
         <div class="rv-top">
           ${roles ? `<i class="chip" title="${sport().slot[slots()[c.slot]].label}">${sport().slot[slots()[c.slot]].short}</i>` : ""}
           <span class="rv-photo">${photo(c.p)}</span>
-          <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${esc(c.p.pos)} · ${esc(c.p.nat)}</div></div>
+          <div><div class="rv-name">${c.p.url ? `<a href="${esc(c.p.url)}" target="_blank" rel="noopener">${esc(c.p.name)}</a>` : esc(c.p.name)}</div><div class="hint">${who(c.p)}</div></div>
         </div>
         <div class="price">${pts(c.price)}</div>
       </div>`).join("");

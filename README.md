@@ -1,6 +1,6 @@
 # Draft Punk
 
-Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Quatre thèmes (**football**, **NBA**, **DOUREUHHH** et **Coupez!**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** par thème.
+Jeu de draft à tour de rôle pour 2 joueurs, sur le même écran. Cinq thèmes (**football**, **NBA**, **rugby**, **DOUREUHHH** et **Coupez!**), deux modes (**Mystery Machine** et **Special One**), plus un **Pokédex** par thème.
 
 ## Lancer
 
@@ -26,6 +26,10 @@ puis ouvrir http://localhost:8173.
 ## NBA
 
 Les deux modes existent aussi en basket, avec ~170 joueurs NBA. Postes : meneur/arrière, ailier, pivot. Compositions : classique (2 meneurs/arrières, 2 ailiers, 1 pivot) ou Street Ball (2 meneurs/arrières, 3 ailiers/pivots). Indices propres au basket : équipes, draft, université.
+
+## Rugby
+
+Les deux modes existent aussi en rugby, avec ~330 joueurs notés. Chaque équipe compte 5 joueurs, sans poste ni placement : la meilleure note cumulée gagne. Indices : taille, poids, club, pays, nombre de sélections, titres. Le Pokédex filtre par pays.
 
 ## DOUREUHHH
 
@@ -56,14 +60,16 @@ Accessible depuis l'accueil : les ~380 joueurs de la base avec leur note, triés
 
 - `js/data.js` : ~380 joueurs, données éditoriales (poste, sélection, trophées, récompenses, note `r`, clubs facultatifs). Ajouter un joueur ici ; `wiki` donne le titre de la page Wikipedia anglaise quand il diffère du nom.
 - `js/nba.js` : ~170 joueurs NBA, mêmes champs éditoriaux.
+- `js/rugby.js` : ~330 joueurs de rugby (pays, note `r`, titres).
 - `js/music.js` : ~320 artistes (genre, nationalité, 3 titres, 3 albums).
 - `js/cinema.js` : ~420 talents (métier, pays, 5 films).
-- `js/wiki.js`, `js/wiki-nba.js`, `js/wiki-music.js` et `js/wiki-cinema.js` : générés depuis Wikipedia / Wikidata (photo, lien, naissance ou formation ; taille, sélections et clubs pour le foot ; taille, franchises, draft et université pour la NBA). Ne pas les éditer à la main :
+- `js/wiki.js`, `js/wiki-nba.js`, `js/wiki-rugby.js`, `js/wiki-music.js` et `js/wiki-cinema.js` : générés depuis Wikipedia / Wikidata (photo, lien, naissance ou formation ; taille, sélections et clubs pour le foot ; taille, franchises, draft et université pour la NBA ; taille, poids, clubs et sélections pour le rugby). Ne pas les éditer à la main :
 
 ```bash
 node scripts/sync-wiki.mjs          # tous les joueurs
 node scripts/sync-wiki.mjs --new    # seulement les joueurs ajoutés
 node scripts/sync-wiki.mjs --sport nba --new     # idem pour la NBA
+node scripts/sync-wiki.mjs --sport rugby --new   # idem pour le rugby
 node scripts/sync-wiki.mjs --sport music --new   # idem pour les artistes
 node scripts/sync-wiki.mjs --sport cinema --new  # idem pour le cinéma
 ```
